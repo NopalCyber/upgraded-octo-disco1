@@ -117,8 +117,6 @@ OpenRouter's free-model router, add the following to `.env` and restart:
 AI_PROVIDER=openrouter
 OPENROUTER_API_KEY=your-openrouter-key
 OPENROUTER_MODEL=openrouter/free
-OPENROUTER_SITE_URL=https://yourdomain.com       # optional attribution
-OPENROUTER_APP_NAME="Nimbus GRC"                 # optional attribution
 ```
 
 `openrouter/free` selects a currently available free model that supports the
