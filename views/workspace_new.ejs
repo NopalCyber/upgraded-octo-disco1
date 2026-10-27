@@ -1,0 +1,129 @@
+<%- include('partials/header', { title: 'New client', user, ws, active: 'dashboard' }) %>
+
+<style>
+  .client-create-form > *,
+  .client-create-options > * { min-width: 0; }
+  @media (max-width: 600px) {
+    .client-create-form,
+    .client-create-options { grid-template-columns: 1fr !important; }
+    .client-create-form fieldset { padding: 11px !important; }
+    .client-create-actions { align-items: stretch; flex-direction: column; }
+    .client-create-actions .btn { width: 100%; justify-content: center; }
+  }
+</style>
+
+<%
+  const savedForm = (typeof form !== 'undefined' && form) ? form : {};
+  const selectedFrameworks = Array.isArray(savedForm.frameworks)
+    ? savedForm.frameworks
+    : (savedForm.frameworks ? [savedForm.frameworks] : []);
+  const isoCodes = frameworkList.filter(f => f.managementSystem).map(f => f.code);
+  const hasIso = selectedFrameworks.some(code => isoCodes.includes(code));
+  const selectedOutcome = savedForm.engagement_outcome || '';
+  const tprmEnabled = String(savedForm.tprm_enabled || '') === '1';
+  const selectedTprmService = savedForm.tprm_service_model || '';
+%>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Create client</h1>
+    <div class="page-subtitle">Create the client first, then configure one or more assessment programmes when the engagement scope is agreed.</div>
+  </div>
+  <a href="/dashboard" class="btn btn-secondary btn-xs">Cancel</a>
+</div>
+
+<div class="panel">
+  <form method="POST" action="/workspaces" class="panel-pad client-create-form" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <% if (typeof formError !== 'undefined' && formError) { %>
+      <div class="col-full" role="alert" style="padding:11px 13px;border:1px solid var(--danger,#b91c1c);border-radius:7px;background:rgba(185,28,28,.05);color:var(--danger,#b91c1c);"><%= formError %></div>
+    <% } %>
+    <div class="col-full">
+      <label class="label">Client name <span class="meta">required</span></label>
+      <input class="input" name="client_name" required autofocus value="<%= savedForm.client_name || '' %>" placeholder="e.g., Acme HealthTech">
+    </div>
+    <div>
+      <label class="label">Industry <span class="meta">optional</span></label>
+      <input class="input" name="industry" value="<%= savedForm.industry || '' %>" placeholder="e.g., HealthTech SaaS, Fintech, Manufacturing">
+    </div>
+    <div id="certification-target-field" <%= hasIso ? '' : 'hidden' %> style="opacity:<%= selectedOutcome === 'certification_support' ? '1' : '.55' %>;">
+      <label class="label">Target certification date <span class="meta">optional · full support only</span></label>
+      <input class="input" id="target-cert-date" type="date" name="target_cert_date" value="<%= savedForm.target_cert_date || '' %>" <%= hasIso && selectedOutcome === 'certification_support' ? '' : 'disabled' %>>
+    </div>
+    <div class="col-full">
+      <label class="label">Initial engagement scope <span class="meta">can be edited later</span></label>
+      <textarea class="textarea" name="scope" rows="4" placeholder="What products, locations, organizational units and technology are in scope? What is explicitly excluded, and why?"><%= savedForm.scope || '' %></textarea>
+    </div>
+    <fieldset id="iso27001-outcome-fieldset" class="col-full" <%= hasIso ? '' : 'hidden' %> style="border:1px solid var(--border);border-radius:8px;padding:14px;margin:0;">
+      <legend class="label" style="padding:0 5px;">Contracted ISO management-system outcome <span class="meta">required</span></legend>
+      <div class="meta text-sm" style="margin-bottom:10px;line-height:1.5;">Choose where this engagement is contracted to end. This controls the delivery journey and its completion gate.</div>
+      <div class="client-create-options" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+        <% outcomeOptions.forEach(option => { %>
+          <label style="display:flex;align-items:flex-start;gap:9px;padding:12px;border:1px solid var(--border);border-radius:7px;cursor:pointer;">
+            <input type="radio" name="engagement_outcome" value="<%= option.value %>" <%= hasIso ? 'required' : '' %> <%= selectedOutcome === option.value ? 'checked' : '' %> style="margin-top:3px;">
+            <span><strong style="display:block;margin-bottom:3px;"><%= option.label %></strong><span class="meta" style="display:block;line-height:1.45;"><%= option.description %></span></span>
+          </label>
+        <% }) %>
+      </div>
+    </fieldset>
+    <div class="col-full">
+      <div class="label">Assessment programmes <span class="meta">choose at least one, or a service below</span></div>
+      <div class="client-create-options" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-top:7px;">
+        <% frameworkList.forEach(fw => { %>
+          <label class="panel-pad" style="display:flex;gap:8px;cursor:pointer;"><input id="<%= fw.code %>-programme" type="checkbox" name="frameworks" value="<%= fw.code %>" <%= selectedFrameworks.includes(fw.code)?'checked':'' %>><span><strong><%= fw.pickerLabel %></strong><span class="meta" style="display:block;"><%= fw.pickerNote %></span></span></label>
+        <% }) %>
+      </div>
+    </div>
+    <div class="col-full" style="padding-top:4px;border-top:1px solid var(--border);">
+      <div class="label">Operational modules <span class="meta">optional · independent of frameworks</span></div>
+      <label class="panel-pad" style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;margin-top:7px;"><input id="tprm-module" type="checkbox" name="tprm_enabled" value="1" <%= tprmEnabled?'checked':'' %> style="margin-top:3px;"><span><strong>Third-party risk</strong><span class="meta" style="display:block;line-height:1.4;">Provider intake, due diligence, consultancy recommendations, client decisions, monitoring, renewal and offboarding.</span></span></label>
+      <fieldset id="tprm-service-fieldset" <%= tprmEnabled?'':'hidden' %> style="border:1px solid var(--border);border-radius:8px;padding:12px;margin:10px 0 0;">
+        <legend class="label" style="padding:0 5px;">TPRM service model <span class="meta">required</span></legend>
+        <div class="client-create-options" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
+          <% [['assessment_only','One-off assessment','Assess selected third parties and issue recommendations.'],['managed_lifecycle','Managed lifecycle','Operate onboarding through monitoring and offboarding.']].forEach(option => { %>
+            <label class="panel-pad" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;"><input type="radio" name="tprm_service_model" value="<%= option[0] %>" <%= selectedTprmService===option[0]?'checked':'' %> <%= tprmEnabled?'required':'' %> style="margin-top:3px;"><span><strong style="display:block;"><%= option[1] %></strong><span class="meta" style="display:block;line-height:1.4;"><%= option[2] %></span></span></label>
+          <% }) %>
+        </div>
+      </fieldset>
+    </div>
+    <div class="col-full client-create-actions" style="display:flex;gap:8px;">
+      <button class="btn btn-primary">Create client</button>
+      <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function () {
+    const target = document.getElementById('target-cert-date');
+    const wrapper = document.getElementById('certification-target-field');
+    const isoProgrammes = Array.from(document.querySelectorAll('input[name="frameworks"]')).filter(input => <%- jsonForScript(isoCodes) %>.includes(input.value));
+    const outcomeFieldset = document.getElementById('iso27001-outcome-fieldset');
+    const choices = document.querySelectorAll('input[name="engagement_outcome"]');
+    const tprmModule = document.getElementById('tprm-module');
+    const tprmServiceFieldset = document.getElementById('tprm-service-fieldset');
+    const tprmServiceChoices = document.querySelectorAll('input[name="tprm_service_model"]');
+    function refreshTarget() {
+      const selected = document.querySelector('input[name="engagement_outcome"]:checked');
+      const hasIso = isoProgrammes.some(input => input.checked);
+      const fullSupport = hasIso && selected && selected.value === 'certification_support';
+      outcomeFieldset.hidden = !hasIso;
+      wrapper.hidden = !hasIso;
+      choices.forEach(choice => { choice.required = hasIso; });
+      target.disabled = !fullSupport;
+      wrapper.style.opacity = fullSupport ? '1' : '.55';
+      if (!fullSupport) target.value = '';
+    }
+    choices.forEach(choice => choice.addEventListener('change', refreshTarget));
+    isoProgrammes.forEach(input => input.addEventListener('change', refreshTarget));
+    function refreshTprmService() {
+      const enabled = !!tprmModule.checked;
+      tprmServiceFieldset.hidden = !enabled;
+      tprmServiceChoices.forEach(choice => { choice.required = enabled; });
+    }
+    tprmModule.addEventListener('change', refreshTprmService);
+    refreshTarget();
+    refreshTprmService();
+  })();
+</script>
+
+<%- include('partials/footer') %>

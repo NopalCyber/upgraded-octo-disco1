@@ -1,0 +1,26 @@
+<%- include('partials/header', { title: 'System', user, ws, active: 'system' }) %>
+
+<div class="page-head">
+  <div><h1 class="page-title">System</h1>
+    <div class="page-subtitle">Firm and workspace calendar policy. Firm-owner only.</div></div>
+</div>
+
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-head"><div><h2>Calendar timezone</h2><div class="meta">Deadlines, overdue states and calendar dates use this policy. A workspace override takes precedence over the firm default.</div></div><span class="tag"><%= effectiveTimezone %></span></div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/system/timezone" class="panel-pad" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end">
+    <div><label class="label" for="firm_timezone">Firm default</label><select class="select" id="firm_timezone" name="firm_timezone" required><% timezones.forEach(zone => { %><option value="<%= zone %>" <%= (firm.timezone || 'UTC') === zone ? 'selected' : '' %>><%= zone %></option><% }) %></select></div>
+    <div><label class="label" for="workspace_timezone">Workspace override</label><select class="select" id="workspace_timezone" name="workspace_timezone"><option value="">Use firm default (<%= firm.timezone || 'UTC' %>)</option><% timezones.forEach(zone => { %><option value="<%= zone %>" <%= ws.timezone === zone ? 'selected' : '' %>><%= zone %></option><% }) %></select></div>
+    <button class="btn btn-primary" type="submit">Save timezone</button>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Platform operations</h2></div>
+  <div class="panel-pad">
+    <div class="callout">
+      Backups, restore drills and encryption-key management are performed by the platform operator through the protected host scheduler and command line. Tenant workspaces do not expose these global operations or their history.
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

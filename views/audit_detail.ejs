@@ -1,0 +1,370 @@
+<%- include('partials/header', { title: audit.title, user, ws, active: 'audits' }) %>
+
+<%- include('partials/audit_tabs', { ws, tab: 'audits' }) %>
+
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+  <a href="/workspaces/<%= ws.id %>/audits" class="link-muted text-base">← All audits</a>
+  <a class="btn btn-secondary btn-sm" href="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/report.docx">Audit report (Word)</a>
+</div>
+
+<%
+  const lifecycleStages = [
+    { key: 'planned',          label: 'Planned',          desc: 'Scope, criteria, methods, schedule' },
+    { key: 'fieldwork',        label: 'Fieldwork',        desc: 'Sampling, interviews, evidence collection' },
+    { key: 'findings_review',  label: 'Findings review',  desc: 'Classify NCs / OFIs; sanity-check with auditees' },
+    { key: 'report',           label: 'Report',           desc: 'Issue audit report to relevant management' },
+    { key: 'follow_up',        label: 'Follow-up',        desc: 'Track corrective actions to closure' },
+    { key: 'closed',           label: 'Closed',           desc: 'All findings actioned; archived' }
+  ];
+  const currentStage = audit.lifecycle_stage || 'planned';
+  const currentIdx = lifecycleStages.findIndex(s => s.key === currentStage);
+%>
+
+<div class="panel" style="margin-top:12px;margin-bottom:14px;">
+  <div class="panel-head"><h2>Audit lifecycle</h2><span class="meta">Stage: <strong style="color:var(--accent);"><%= currentStage.replace('_',' ') %></strong></span></div>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:0;border-top:1px solid var(--border);">
+    <% lifecycleStages.forEach((s, i) => {
+         const isActive = s.key === currentStage;
+         const isPast = i < currentIdx;
+         const color = isActive ? '#0891b2' : isPast ? '#16a34a' : 'var(--text-tertiary)';
+         const bg = isActive ? 'rgba(8,145,178,0.08)' : isPast ? 'rgba(22,163,74,0.04)' : 'var(--bg-subtle)';
+    %>
+      <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/lifecycle" style="margin:0;">
+        <input type="hidden" name="stage" value="<%= s.key %>">
+        <button type="submit" style="width:100%;height:100%;border:none;<%= i < lifecycleStages.length - 1 ? 'border-right:1px solid var(--border);' : '' %>background:<%= bg %>;color:<%= color %>;padding:10px 8px;font-size:11px;font-weight: 500;cursor:pointer;text-align:left;" title="<%= s.desc %>">
+          <div style="text-transform:uppercase;letter-spacing:0.04em;"><%= s.label %></div>
+          <div style="font-size:10px;font-weight:400;line-height:1.3;margin-top:2px;color:<%= isActive || isPast ? color : 'var(--text-secondary)' %>;"><%= s.desc %></div>
+        </button>
+      </form>
+    <% }) %>
+  </div>
+  <% if (audit.fieldwork_started_at || audit.report_issued_at || audit.closed_at) { %>
+    <div class="meta text-xs" style="padding:6px 14px;border-top:1px solid var(--border);background:var(--bg-subtle);">
+      <% if (audit.fieldwork_started_at) { %>Fieldwork started: <strong><%= audit.fieldwork_started_at %></strong><% } %>
+      <% if (audit.report_issued_at) { %> · Report issued: <strong><%= audit.report_issued_at %></strong><% } %>
+      <% if (audit.closed_at) { %> · Closed: <strong><%= audit.closed_at %></strong><% } %>
+    </div>
+  <% } %>
+</div>
+
+<div class="panel" style="margin-bottom:16px">
+  <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>" class="panel-pad grid-2">
+    <div class="col-full"><label class="label">Title</label><input class="input" name="title" value="<%= audit.title %>" required></div>
+    <div class="col-full"><label class="label">Scope</label><input class="input" name="scope" value="<%= audit.scope || '' %>"></div>
+    <div><label class="label">Audit date</label><input class="input" type="date" name="audit_date" value="<%= audit.audit_date || '' %>"></div>
+    <div><label class="label">Auditor</label><input class="input" name="auditor_name" value="<%= audit.auditor_name || '' %>"></div>
+    <div><label class="label">Status</label>
+      <select class="select" name="status">
+        <% ['planned','in_progress','complete'].forEach(s => { %><option value="<%= s %>" <%= audit.status === s ? 'selected' : '' %>><%= s.replace('_',' ') %></option><% }) %>
+      </select>
+    </div>
+    <div></div>
+    <div class="col-full"><label class="label">Summary / executive notes</label><textarea class="textarea" name="summary" rows="3"><%= audit.summary || '' %></textarea></div>
+    <div class="col-full row">
+      <button class="btn btn-primary">Save</button>
+      <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/delete" onsubmit="return appConfirmForm(event, 'Delete?')" style="display:inline">
+        <button class="btn btn-danger">Delete audit</button>
+      </form>
+    </div>
+  </form>
+</div>
+
+<div class="panel" style="margin-bottom:14px;">
+  <div class="panel-head"><h2>Generate audit checklist</h2><span class="meta">Pre-populates observations with starter questions, sample-size hints, and finding templates</span></div>
+  <div class="panel-pad" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+
+    <div style="padding:14px 16px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:8px;">
+      <div class="text-eyebrow" style="color:var(--accent-deep);margin-bottom:6px;">RECOMMENDED</div>
+      <div style="font-size:13.5px;font-weight: 500;color:var(--ink);margin-bottom:4px;">From the Statement of Applicability</div>
+      <div class="meta text-sm" style="line-height:1.5;margin-bottom:10px;">
+        One observation per applicable + included control. Each item pre-fills the linked-policy count, linked-evidence count, a sample-size suggestion based on the control family, and a finding wording template.
+      </div>
+      <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/checklist-from-soa" onsubmit="return appConfirmForm(event, 'Generate one observation per control included on the Statement of Applicability? Existing observations are kept.');">
+        <button class="btn btn-primary btn-xs">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Generate from SoA
+        </button>
+      </form>
+    </div>
+
+    <div style="padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg-subtle);">
+      <div class="text-eyebrow text-tertiary" style="margin-bottom:6px;">BY CATEGORY</div>
+      <div style="font-size:13.5px;font-weight: 500;color:var(--ink);margin-bottom:4px;">By section</div>
+      <div class="meta text-sm" style="line-height:1.5;margin-bottom:10px;">
+        Generates for every control in the chosen section, regardless of applicability. Use when scoping a broader sample.
+      </div>
+      <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/checklist" style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;">
+        <select class="select" name="category" required style="flex:1;min-width:160px;font-size:12px;">
+          <option value="">- pick a section -</option>
+          <% (checklistSources || []).forEach(src => { %>
+            <% src.sections.forEach(sec => { %><option value="<%= sec.value %>"><%= sec.label %></option><% }) %>
+          <% }) %>
+        </select>
+        <button class="btn btn-secondary btn-xs" onclick="return appConfirmClick(event, 'This adds one observation per control in this category. Continue?')">Generate</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%
+  const obsList = (typeof observations !== 'undefined' && Array.isArray(observations)) ? observations : [];
+  const openObs = obsList.filter(o => o.status !== 'closed');
+  const closedObs = obsList.filter(o => o.status === 'closed');
+  function bucketFor(id) {
+    if (!id) return 'other';
+    if (id.startsWith('clause-')) return 'iso27001:clauses';
+    if (id.startsWith('annex-a.5.')) return 'iso27001:org';
+    if (id.startsWith('annex-a.6.')) return 'iso27001:people';
+    if (id.startsWith('annex-a.7.')) return 'iso27001:physical';
+    if (id.startsWith('annex-a.8.')) return 'iso27001:tech';
+    return 'other';
+  }
+  const bucketCounts = { all: obsList.length, other: 0 };
+  obsList.forEach(o => { const b = bucketFor(o.iso_item_id); bucketCounts[b] = (bucketCounts[b] || 0) + 1; });
+%>
+<div class="panel" style="margin-bottom:14px;">
+  <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <h2>Checklist</h2>
+      <span class="meta"><%= openObs.length %> open<% if (closedObs.length) { %> · <%= closedObs.length %> closed<% } %></span>
+    </div>
+    <% if (openObs.length > 0) { %>
+      <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/checklist/clear"
+            onsubmit="return appConfirmForm(event, 'Delete all open checklist items? Closed items are kept. This cannot be undone.');">
+        <button class="btn btn-secondary btn-xs">Clear open items</button>
+      </form>
+    <% } %>
+  </div>
+  <% if (obsList.length === 0) { %>
+    <div class="t-empty">No checklist items yet. Use Generate from SoA above to pre-populate one per included control.</div>
+  <% } else { %>
+    <%
+      const filterDefs = [{ key: 'all', label: 'All' }]
+        .concat(...(checklistSources || []).map(src => src.sections.map(sec => ({ key: sec.value, label: sec.label }))))
+        .filter(f => f.key === 'all' || bucketCounts[f.key] > 0);
+    %>
+    <div class="panel-pad" style="display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--border);background:var(--bg-subtle);">
+      <% filterDefs.forEach((f, idx) => { %>
+        <button type="button" class="btn btn-secondary btn-xs js-checklist-filter<%= idx === 0 ? ' is-active' : '' %>"
+                data-bucket="<%= f.key %>"
+                style="<%= idx === 0 ? 'background:var(--accent);color:white;border-color:var(--accent);' : '' %>">
+          <%= f.label %> <span class="meta" style="margin-left:4px;opacity:0.85;"><%= bucketCounts[f.key] %></span>
+        </button>
+      <% }) %>
+    </div>
+    <div class="divide-row js-checklist-list">
+      <% obsList.forEach(o => { %>
+        <div class="js-checklist-row" data-bucket="<%= bucketFor(o.iso_item_id) %>" style="padding:12px 16px;<%= o.status === 'closed' ? 'opacity:0.6;' : '' %>">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <span class="tag <%= o.status === 'closed' ? 'tag-neutral' : 'tag-warn' %>"><%= o.status %></span>
+            <% if (o.iso_title) { %><span class="meta"><strong><%= o.iso_title %></strong></span><% } %>
+          </div>
+          <details style="margin-bottom:8px;">
+            <summary class="meta text-sm" style="cursor:pointer;">Test guide (pre-filled prompts, sample-size hint, finding template)</summary>
+            <div class="text-sm" style="white-space:pre-wrap;line-height:1.55;margin-top:6px;padding:8px 10px;background:var(--bg-subtle);border-radius:6px;"><%= o.description %></div>
+          </details>
+          <form method="POST" action="/workspaces/<%= ws.id %>/audits/observations/<%= o.id %>/notes" style="margin-bottom:6px;">
+            <label class="label">Auditor notes / findings</label>
+            <textarea class="input text-md" name="recommendation" rows="3" placeholder="What did you test? What did you see? Evidence references. If NC, root cause." <%= o.status === 'closed' ? 'disabled' : '' %>><%= o.recommendation || '' %></textarea>
+            <% if (o.status !== 'closed') { %>
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                <button class="btn btn-primary btn-xs">Save notes</button>
+              </div>
+            <% } %>
+          </form>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <% if (o.status !== 'closed') { %>
+              <details style="flex:1;min-width:260px;">
+                <summary class="meta text-sm" style="cursor:pointer;">+ Promote to finding</summary>
+                <form method="POST" action="/workspaces/<%= ws.id %>/audits/observations/<%= o.id %>/promote" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:6px;">
+                  <div><label class="label text-sm">Type</label>
+                    <select class="select text-sm" name="finding_type">
+                      <option value="major_nc">Major NC</option>
+                      <option value="minor_nc">Minor NC</option>
+                      <option value="observation" selected>Observation</option>
+                      <option value="ofi">OFI</option>
+                    </select>
+                  </div>
+                  <div><label class="label text-sm">Severity</label>
+                    <select class="select text-sm" name="severity">
+                      <option value="low">Low</option>
+                      <option value="medium" selected>Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                  <div class="col-full" style="grid-column:1/-1;"><label class="label text-sm">Description (defaults to your notes)</label>
+                    <textarea class="input text-sm" name="description" rows="2" placeholder="Leave blank to use your notes above"></textarea>
+                  </div>
+                  <div class="col-full" style="grid-column:1/-1;"><button class="btn btn-primary btn-xs">Promote to finding (closes this item)</button></div>
+                </form>
+              </details>
+              <form method="POST" action="/workspaces/<%= ws.id %>/audits/observations/<%= o.id %>/close">
+                <button class="btn btn-secondary btn-xs">Mark closed (no finding)</button>
+              </form>
+            <% } else { %>
+              <form method="POST" action="/workspaces/<%= ws.id %>/audits/observations/<%= o.id %>/reopen">
+                <button class="btn btn-secondary btn-xs">Reopen</button>
+              </form>
+            <% } %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <div class="js-checklist-empty t-empty" style="display:none;">No items in this section.</div>
+    <script>
+    (function () {
+      const buttons = document.querySelectorAll('.js-checklist-filter');
+      const rows = document.querySelectorAll('.js-checklist-row');
+      const emptyMsg = document.querySelector('.js-checklist-empty');
+      if (!buttons.length || !rows.length) return;
+      function apply(bucket) {
+        let shown = 0;
+        rows.forEach(r => {
+          const match = bucket === 'all' || r.dataset.bucket === bucket;
+          r.style.display = match ? '' : 'none';
+          if (match) shown++;
+        });
+        buttons.forEach(b => {
+          const active = b.dataset.bucket === bucket;
+          b.classList.toggle('is-active', active);
+          if (active) {
+            b.style.background = 'var(--accent)';
+            b.style.color = 'white';
+            b.style.borderColor = 'var(--accent)';
+          } else {
+            b.style.background = '';
+            b.style.color = '';
+            b.style.borderColor = '';
+          }
+        });
+        if (emptyMsg) emptyMsg.style.display = shown === 0 ? '' : 'none';
+      }
+      buttons.forEach(b => b.addEventListener('click', () => apply(b.dataset.bucket)));
+    })();
+    </script>
+  <% } %>
+
+  <details>
+    <summary class="panel-pad text-lg text-secondary" style="border-top:1px solid var(--border);background:var(--bg-subtle);">+ Add checklist item</summary>
+    <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/observations" class="panel-pad" style="border-top:1px solid var(--border);display:grid;grid-template-columns:1fr;gap:12px;">
+      <div>
+        <label class="label">Control (optional)</label>
+        <%- include('partials/requirement_select', { groups: requirementGroups, name: 'iso_item_id' }) %>
+      </div>
+      <div><label class="label">Description</label><textarea class="input" name="description" rows="3" required></textarea></div>
+      <div><label class="label">Recommendation (optional)</label><textarea class="input" name="recommendation" rows="2"></textarea></div>
+      <div><button class="btn btn-primary btn-xs">Add item</button></div>
+    </form>
+  </details>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Findings</h2><span class="meta"><%= findings.length %> total</span></div>
+  <% if (findings.length === 0) { %>
+    <div class="t-empty">No findings yet.</div>
+  <% } else { %>
+    <div class="divide-row">
+      <% findings.forEach(f => { %>
+        <div style="padding:12px 16px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span class="tag <%= f.finding_type === 'major_nc' ? 'tag-danger' : f.finding_type === 'minor_nc' ? 'tag-warn' : 'tag-neutral' %>"><%= f.finding_type.replace('_',' ') %></span>
+                <span class="tag <%= f.severity === 'high' ? 'tag-danger' : f.severity === 'medium' ? 'tag-warn' : 'tag-neutral' %>"><%= f.severity %></span>
+                <% if (f.iso_title) { %><span class="meta"><%= f.iso_title %></span><% } %>
+              </div>
+              <div class="text-lg"><%= f.description %></div>
+            </div>
+            <% if (f.nonconformity_id) { %>
+              <a href="/workspaces/<%= ws.id %>/nonconformities/<%= f.nonconformity_id %>" class="btn btn-secondary btn-xs">→ NC #<%= f.nonconformity_id %></a>
+            <% } else if (f.finding_type === 'major_nc' || f.finding_type === 'minor_nc') { %>
+              <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/findings/<%= f.id %>/promote">
+                <button class="btn btn-secondary btn-xs">Promote to NC</button>
+              </form>
+            <% } %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <details>
+    <summary class="panel-pad text-lg text-secondary" style="border-top:1px solid var(--border);background:var(--bg-subtle);">+ Add finding</summary>
+    <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/findings" class="panel-pad" style="border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+      <div><label class="label">Type</label>
+        <select class="select" name="finding_type">
+          <option value="major_nc">Major NC</option><option value="minor_nc">Minor NC</option>
+          <option value="observation" selected>Observation</option><option value="ofi">OFI</option>
+        </select>
+      </div>
+      <div><label class="label">Severity</label>
+        <select class="select" name="severity"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
+      </div>
+      <div><label class="label">Related requirement</label>
+        <%- include('partials/requirement_select', { groups: requirementGroups, name: 'iso_item_id' }) %>
+      </div>
+      <div class="col-full"><label class="label">Description</label><textarea class="textarea" name="description" rows="3" required></textarea></div>
+      <div class="col-full"><button class="btn btn-primary btn-xs">Add finding</button></div>
+    </form>
+  </details>
+</div>
+
+<div class="panel" style="margin-top:18px;">
+  <div class="panel-head">
+    <h2>Sampling <span class="meta text-lg" style="font-weight:400;">· Clause 9.2</span></h2>
+    <span class="meta">Pop. <%= audit.population_size || '-' %> · sample <%= audit.sample_size || '-' %></span>
+  </div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/sampling" class="panel-pad" style="display:grid;grid-template-columns:1fr 100px 100px;gap:8px;align-items:end;">
+    <div>
+      <label class="label">Overall sampling justification</label>
+      <textarea class="textarea" name="sampling_justification" rows="2" placeholder="e.g., 10% sample stratified by criticality; high-risk controls fully sampled; population from system inventory dated 2026-04-01."><%= audit.sampling_justification || '' %></textarea>
+    </div>
+    <div><label class="label">Population size</label><input class="input" type="number" name="population_size" value="<%= audit.population_size || '' %>"></div>
+    <div><label class="label">Sample size</label><input class="input" type="number" name="sample_size" value="<%= audit.sample_size || '' %>"></div>
+    <div class="col-full"><button class="btn btn-primary btn-xs">Save sampling</button></div>
+  </form>
+
+  <% if (samples && samples.length > 0) { %>
+    <table class="t" style="border-top:1px solid var(--border);">
+      <thead><tr>
+        <th style="width:140px;">Control</th>
+        <th>What was sampled</th>
+        <th style="width:110px;">Date</th>
+        <th style="width:90px;">Pop / Sample</th>
+        <th style="width:240px;">Finding</th>
+        <th style="width:50px;"></th>
+      </tr></thead>
+      <tbody>
+        <% samples.forEach(s => { %>
+          <tr>
+            <td class="mono meta text-sm"><%= s.iso_item_id ? s.iso_item_id.replace('annex-','').replace('clause-','').toUpperCase() : '-' %></td>
+            <td class="text-md"><%= s.description %></td>
+            <td class="meta text-sm"><%= s.sample_taken_at || '-' %></td>
+            <td class="num meta text-sm"><%= s.population_size || '-' %> / <%= s.sample_size || '-' %></td>
+            <td class="text-base"><%= s.finding || '-' %></td>
+            <td>
+              <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/samples/<%= s.id %>/delete" onsubmit="return appConfirmForm(event, 'Delete sample?')" style="display:inline;">
+                <button class="btn btn-ghost btn-xs text-secondary">×</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+
+  <form method="POST" action="/workspaces/<%= ws.id %>/audits/<%= audit.id %>/samples" class="panel-pad" style="border-top:1px solid var(--border);background:var(--bg-subtle);display:grid;grid-template-columns:160px 1fr 110px 80px 80px 1fr auto;gap:6px;align-items:end;">
+    <div>
+      <label class="label">Control / clause</label>
+      <%- include('partials/requirement_select', { groups: requirementGroups, name: 'iso_item_id', cls: 'select text-base', blank: '- optional -', short: true }) %>
+    </div>
+    <div><label class="label">What was sampled</label><input class="input text-base" name="description" required placeholder="e.g., 5 of 28 access reviews from Q1"></div>
+    <div><label class="label">Date</label><input class="input text-base" type="date" name="sample_taken_at"></div>
+    <div><label class="label">Pop</label><input class="input text-base" type="number" name="population_size"></div>
+    <div><label class="label">Sample</label><input class="input text-base" type="number" name="sample_size"></div>
+    <div><label class="label">Finding</label><input class="input text-base" name="finding" placeholder="OK / minor NC / major NC"></div>
+    <div><button class="btn btn-primary btn-xs">Add</button></div>
+  </form>
+</div>
+
+<%- include('partials/footer') %>

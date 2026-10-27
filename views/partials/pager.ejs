@@ -1,0 +1,13 @@
+<% if (pg && pg.pages > 1) { %>
+  <div class="row" style="justify-content:space-between;align-items:center;margin-top:12px;">
+    <span class="meta">Page <%= pg.page %> of <%= pg.pages %> · <%= pg.total %> rows</span>
+    <span class="row" style="gap:6px;">
+      <% if (pg.page > 1) { %>
+        <a class="btn btn-secondary btn-xs" href="<%= pagerHref(pg.page - 1) %>">← Previous</a>
+      <% } %>
+      <% if (pg.page < pg.pages) { %>
+        <a class="btn btn-secondary btn-xs" href="<%= pagerHref(pg.page + 1) %>">Next →</a>
+      <% } %>
+    </span>
+  </div>
+<% } %>

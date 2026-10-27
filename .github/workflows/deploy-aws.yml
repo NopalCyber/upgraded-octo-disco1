@@ -1,0 +1,285 @@
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: environment
+        required: true
+      rebuild_image:
+        description: Rebuild even if this commit's image exists (refreshes ClamAV signatures and OS packages)
+        type: boolean
+        default: false
+      skip_database_snapshot:
+        description: Skip the pre-deploy RDS snapshot
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: deploy-aws-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.APP_URL }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+      ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+      ECS_TASK_FAMILY: ${{ vars.ECS_TASK_FAMILY }}
+      CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
+      APP_URL: ${{ vars.APP_URL }}
+      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+      DB_INSTANCE_IDENTIFIER: ${{ vars.DB_INSTANCE_IDENTIFIER }}
+      DEPLOY_REQUIRED_REF: ${{ vars.DEPLOY_REQUIRED_REF }}
+      RELEASE_SHA: ${{ github.sha }}
+      REBUILD_IMAGE: ${{ inputs.rebuild_image }}
+      SKIP_DATABASE_SNAPSHOT: ${{ inputs.skip_database_snapshot }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check deployment settings
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AWS_REGION AWS_DEPLOY_ROLE_ARN ECR_REPOSITORY ECS_CLUSTER ECS_SERVICE ECS_TASK_FAMILY CONTAINER_NAME APP_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Variable $name is not set on this GitHub environment (see deploy/AWS.md)."
+              missing=1
+            fi
+          done
+          if [ -z "${DB_INSTANCE_IDENTIFIER:-}" ] && [ "$SKIP_DATABASE_SNAPSHOT" != "true" ]; then
+            echo "::error::Variable DB_INSTANCE_IDENTIFIER is not set on this GitHub environment (see deploy/AWS.md)."
+            missing=1
+          fi
+          [ "$missing" -eq 0 ] || exit 1
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Release identity must be a full commit SHA, got '$RELEASE_SHA'."
+            exit 1
+          fi
+          if [[ ! "$APP_URL" =~ ^https://[A-Za-z0-9.-]+/?$ ]]; then
+            echo "::error::APP_URL must be an https:// origin without a port or path."
+            exit 1
+          fi
+          if [ -n "$DEPLOY_REQUIRED_REF" ] && [ "$GITHUB_REF" != "$DEPLOY_REQUIRED_REF" ]; then
+            echo "::error::This environment only deploys $DEPLOY_REQUIRED_REF; this run is for $GITHUB_REF."
+            exit 1
+          fi
+          echo "Deploying $RELEASE_SHA ($GITHUB_REF) to $ECS_CLUSTER/$ECS_SERVICE"
+
+      - name: Check out the release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Assume the deploy role (GitHub OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: deploy-${{ github.run_id }}-${{ github.run_attempt }}
+          mask-aws-account-id: true
+
+      - name: Log in to Amazon ECR
+        run: |
+          set -euo pipefail
+          repository_uri="$(aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" \
+            --query 'repositories[0].repositoryUri' --output text)"
+          registry="${repository_uri%%/*}"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+          {
+            echo "REGISTRY=$registry"
+            echo "REPOSITORY_URI=$repository_uri"
+          } >> "$GITHUB_ENV"
+
+      - name: Build and push the image
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_SHA"
+          build=true
+          if [ "$REBUILD_IMAGE" = "true" ]; then
+            tag="$RELEASE_SHA-r$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          elif aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+              --image-ids imageTag="$tag" >/dev/null 2>&1; then
+            echo "Image $tag is already in ECR; reusing it."
+            build=false
+          fi
+          image="$REPOSITORY_URI:$tag"
+          if [ "$build" = "true" ]; then
+            docker build --pull --platform linux/amd64 --provenance=false --sbom=false \
+              --label "org.opencontainers.image.revision=$RELEASE_SHA" \
+              --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --tag "$image" .
+            docker push "$image"
+          fi
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Snapshot the database before deploying
+        if: ${{ !inputs.skip_database_snapshot }}
+        run: |
+          set -euo pipefail
+          snapshot="$DB_INSTANCE_IDENTIFIER-predeploy-${RELEASE_SHA:0:12}-$(date -u +%Y%m%d%H%M%S)"
+          echo "Creating RDS snapshot $snapshot"
+          aws rds create-db-snapshot --db-instance-identifier "$DB_INSTANCE_IDENTIFIER" \
+            --db-snapshot-identifier "$snapshot" --query 'DBSnapshot.Status' --output text
+          aws rds wait db-snapshot-available --db-snapshot-identifier "$snapshot"
+          echo "DB_SNAPSHOT=$snapshot" >> "$GITHUB_ENV"
+
+      - name: Register the task definition revision
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" \
+            --query taskDefinition --output json > base-task-definition.json
+          jq --arg name "$CONTAINER_NAME" --arg image "$IMAGE" --arg version "$RELEASE_SHA" '
+            if ([.containerDefinitions[] | select(.name == $name)] | length) != 1
+            then error("container \($name) not found in the task definition") else . end
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities,
+                  .registeredAt, .registeredBy, .deregisteredAt, .deleteRequestedAt)
+            | .containerDefinitions |= map(
+                if .name == $name then
+                  .image = $image
+                  | .environment = ([(.environment // [])[] | select(.name != "APP_VERSION")]
+                                    + [{name: "APP_VERSION", value: $version}])
+                else . end)
+          ' base-task-definition.json > task-definition.json
+          task_definition_arn="$(aws ecs register-task-definition \
+            --cli-input-json file://task-definition.json \
+            --query taskDefinition.taskDefinitionArn --output text)"
+          echo "Registered $task_definition_arn"
+          echo "TASK_DEFINITION_ARN=$task_definition_arn" >> "$GITHUB_ENV"
+
+      - name: Update the ECS service
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016
+          desired="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[?status==`ACTIVE`] | [0].desiredCount' --output text)"
+          if [[ ! "$desired" =~ ^[0-9]+$ ]]; then
+            echo "::error::Service $ECS_SERVICE was not found (active) in cluster $ECS_CLUSTER."
+            exit 1
+          fi
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+            --task-definition "$TASK_DEFINITION_ARN" --query 'service.serviceName' --output text
+          echo "DESIRED_COUNT=$desired" >> "$GITHUB_ENV"
+          if [ "$desired" = "0" ]; then
+            echo "::notice::The service is scaled to 0 (first-time setup). The new revision is in place; start the service with terraform (service_enabled = true) and check /readyz."
+          fi
+
+      - name: Wait for the deployment to complete
+        if: env.DESIRED_COUNT != '0'
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1800))
+          while :; do
+            # shellcheck disable=SC2016
+            primary="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+              --query 'services[0].deployments[?status==`PRIMARY`] | [0]' --output json)"
+            task_definition="$(jq -r '.taskDefinition' <<<"$primary")"
+            state="$(jq -r '.rolloutState' <<<"$primary")"
+            running="$(jq -r '.runningCount' <<<"$primary")"
+            desired="$(jq -r '.desiredCount' <<<"$primary")"
+            if [ "$task_definition" != "$TASK_DEFINITION_ARN" ]; then
+              echo "::error::The service's primary deployment is $task_definition, not $TASK_DEFINITION_ARN. The circuit breaker rolled back, or another deployment replaced this one."
+              exit 1
+            fi
+            echo "$(date -u +%H:%M:%S) rollout=$state running=$running/$desired"
+            case "$state" in
+              COMPLETED) break ;;
+              FAILED)
+                echo "::error::Deployment failed: $(jq -r '.rolloutStateReason' <<<"$primary")"
+                exit 1 ;;
+            esac
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Deployment did not complete within 30 minutes."
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Verify /readyz reports this release
+        if: env.DESIRED_COUNT != '0'
+        run: |
+          set -euo pipefail
+          origin="${APP_URL%/}"
+          host="${origin#https://}"
+          connect=()
+          if [ -n "$ALB_DNS_NAME" ]; then
+            connect=(--connect-to "$host:443:$ALB_DNS_NAME:443")
+          fi
+          streak=0
+          for attempt in $(seq 1 40); do
+            if curl --silent --show-error --fail --max-time 10 "${connect[@]}" \
+                --output ready.json "$origin/readyz"; then
+              if jq -e --arg v "$RELEASE_SHA" '.ok == true and .version == $v' ready.json >/dev/null; then
+                streak=$((streak + 1))
+                if [ "$streak" -ge 6 ]; then
+                  echo "Ready: $RELEASE_SHA answered /readyz $streak times in a row (attempt $attempt)."
+                  exit 0
+                fi
+              else
+                streak=0
+              fi
+            else
+              streak=0
+            fi
+            sleep 5
+          done
+          echo "::error::/readyz did not consistently report version $RELEASE_SHA with ok=true."
+          cat ready.json 2>/dev/null || true
+          exit 1
+
+      - name: Show why the deployment failed
+        if: failure() && env.TASK_DEFINITION_ARN != ''
+        run: |
+          set -uo pipefail
+          echo "Recent service events:"
+          aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].events[0:15].[createdAt,message]' --output text || true
+          stopped="$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$ECS_SERVICE" \
+            --desired-status STOPPED --query 'taskArns[0:5]' --output text || true)"
+          if [ -n "$stopped" ] && [ "$stopped" != "None" ]; then
+            echo "Recently stopped tasks:"
+            read -r -a stopped_tasks <<<"$stopped"
+            aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "${stopped_tasks[@]}" \
+              --query 'tasks[].{task:taskArn,revision:taskDefinitionArn,stopCode:stopCode,reason:stoppedReason,containers:containers[].{name:name,exitCode:exitCode,reason:reason}}' \
+              --output json || true
+          fi
+          echo "Application output is in CloudWatch Logs (/ecs/<app>-<env>/app). It is not printed here because it can contain client data."
+
+      - name: Summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### Deploy to \`$ECS_CLUSTER\`"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`$RELEASE_SHA\` ($GITHUB_REF) |"
+            echo "| Image | \`${IMAGE:-not built}\` |"
+            echo "| Task definition | \`${TASK_DEFINITION_ARN:-not registered}\` |"
+            echo "| Pre-deploy DB snapshot | \`${DB_SNAPSHOT:-none}\` |"
+            echo "| Status | $JOB_STATUS |"
+            echo ""
+            echo "Roll back: re-run this workflow from the previous release tag (the image is reused), or"
+            echo "\`aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --task-definition <previous revision>\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log out of Amazon ECR
+        if: always() && env.REGISTRY != ''
+        run: docker logout "$REGISTRY"

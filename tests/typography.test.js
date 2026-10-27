@@ -1,0 +1,54 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {
+  normalizeDisplayPunctuation,
+  confirmationMatchesRenderedName,
+} = require('../lib/typography');
+
+const ROOT = path.join(__dirname, '..');
+const SOURCE_PATHS = ['views', 'routes', 'lib', 'data', 'scripts', 'public', 'server.js'];
+const TEXT_EXTENSIONS = new Set(['.css', '.ejs', '.html', '.js', '.json', '.md', '.txt']);
+
+function sourceFiles(entry) {
+  const absolute = path.join(ROOT, entry);
+  const stat = fs.statSync(absolute);
+  if (stat.isFile()) return [absolute];
+  return fs.readdirSync(absolute, { withFileTypes: true }).flatMap(item => {
+    if (item.name === 'node_modules' || item.name.startsWith('.')) return [];
+    const child = path.join(absolute, item.name);
+    if (path.relative(ROOT, child) === path.join('data', 'ai-models')) return [];
+    if (item.isDirectory()) return sourceFiles(path.relative(ROOT, child));
+    return TEXT_EXTENSIONS.has(path.extname(item.name)) ? [child] : [];
+  });
+}
+
+test('rendered application copy never contains an em dash', () => {
+  const dash = String.fromCodePoint(0x2014);
+  const entity = '&' + 'mdash;';
+  const rendered = normalizeDisplayPunctuation(`Before ${dash} after ${entity} done`);
+  assert.equal(rendered, 'Before - after - done');
+});
+
+test('destructive name confirmation matches the rendered value without becoming case-insensitive', () => {
+  const stored = `Atlas Cloud ${String.fromCodePoint(0x2014)} ISO 27001`;
+  assert.equal(confirmationMatchesRenderedName('Atlas Cloud - ISO 27001', stored), true);
+  assert.equal(confirmationMatchesRenderedName('  Atlas Cloud - ISO 27001  ', stored), true);
+  assert.equal(confirmationMatchesRenderedName('atlas cloud - iso 27001', stored), false);
+  assert.equal(confirmationMatchesRenderedName('Atlas Cloud ISO 27001', stored), false);
+  assert.equal(confirmationMatchesRenderedName('Atlas Cloud - ISO 27001', 'Atlas Cloud &mdash; ISO 27001'), false,
+    'a literal entity in stored text is not the same value as rendered punctuation');
+});
+
+test('application source contains no authored em dashes', () => {
+  const dash = String.fromCodePoint(0x2014);
+  const entity = '&' + 'mdash;';
+  const offenders = SOURCE_PATHS.flatMap(sourceFiles).filter(file => {
+    const content = fs.readFileSync(file, 'utf8');
+    return content.includes(dash) || content.toLowerCase().includes(entity);
+  });
+  assert.deepEqual(offenders, []);
+});

@@ -1,0 +1,188 @@
+<%- include('partials/header', { title: 'Set up your firm', user, ws, active: 'onboarding' }) %>
+
+<style>
+  .onboarding-client-grid > *,
+  .onboarding-essentials-grid > * { min-width: 0; }
+  @media (max-width: 600px) {
+    .onboarding-required-row {
+      grid-template-columns: 40px minmax(0, 1fr) !important;
+      padding: 14px !important;
+    }
+    .onboarding-required-row > :last-child {
+      grid-column: 2;
+      justify-self: stretch;
+      max-width: none !important;
+      text-align: left !important;
+    }
+    .onboarding-required-row > .btn { justify-content: center; }
+    .onboarding-client-grid,
+    .onboarding-essentials-grid { grid-template-columns: minmax(0, 1fr) !important; }
+    .onboarding-card-action { justify-content: stretch !important; }
+    .onboarding-card-action .btn { width: 100%; justify-content: center; }
+    .onboarding-final-actions {
+      align-items: stretch !important;
+      flex-direction: column;
+    }
+    .onboarding-final-actions form,
+    .onboarding-final-actions .btn { width: 100%; }
+    .onboarding-final-actions .btn { justify-content: center; }
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Set up your firm</h1>
+    <div class="page-subtitle">Start by creating a client and recording the services in the engagement. Programme-specific setup appears only after those services are selected.</div>
+  </div>
+  <div class="meta text-lg"><strong><%= completedCount %></strong> / <%= totalSteps %> required</div>
+</div>
+
+<div style="margin-bottom:18px;">
+  <div role="progressbar" aria-label="Firm onboarding progress" aria-valuemin="0" aria-valuemax="<%= totalSteps %>" aria-valuenow="<%= completedCount %>" style="height:6px;background:var(--bg-subtle);border-radius:3px;overflow:hidden;">
+    <div style="height:100%;width:<%= Math.round(completedCount / totalSteps * 100) %>%;background:var(--accent);transition:width 0.3s;"></div>
+  </div>
+</div>
+
+<section class="panel" style="margin-bottom:18px;">
+  <div class="panel-head">
+    <div>
+      <div class="sec-label" style="margin-bottom:4px;">Required start</div>
+      <h2 style="margin:0;">Create the client record first</h2>
+    </div>
+    <span class="status <%= completedCount === totalSteps ? 's-implemented' : 's-not-assessed' %>"><%= completedCount === totalSteps ? 'Done' : 'Not started' %></span>
+  </div>
+  <% steps.forEach(step => { %>
+    <div class="onboarding-required-row" style="display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:12px;padding:16px 18px;align-items:center;">
+      <div aria-hidden="true" style="width:32px;height:32px;border-radius:50%;background:<%= step.done ? 'rgba(22,128,61,0.10)' : 'var(--bg-subtle)' %>;color:<%= step.done ? '#15803d' : 'var(--text-tertiary)' %>;display:flex;align-items:center;justify-content:center;font-weight:600;"><%= step.done ? '✓' : step.num %></div>
+      <div>
+        <div style="font-size:14px;font-weight:600;"><%= step.title %></div>
+        <div class="meta text-md" style="margin-top:3px;line-height:1.5;"><%= step.desc %></div>
+      </div>
+      <% if (step.done) { %>
+        <a href="/dashboard" class="btn btn-secondary btn-xs">View clients</a>
+      <% } else if (canCreateClients) { %>
+        <a href="<%= step.href %>" class="btn btn-primary btn-xs"><%= step.cta %></a>
+      <% } else { %>
+        <span class="meta text-xs" style="max-width:190px;text-align:right;">A manager or senior consultant creates clients.</span>
+      <% } %>
+    </div>
+  <% }) %>
+</section>
+
+<% if (!clientSummaries.length && completedCount === 0) { %>
+  <section class="panel empty-state" style="margin-bottom:18px;">
+    <div class="empty-title">No client has been created yet</div>
+    <div class="empty-sub">There is no framework checklist to complete at firm level. Create the client, choose its contracted programmes or modules, and the client workspace will show only the relevant setup steps.</div>
+  </section>
+<% } else if (!clientSummaries.length) { %>
+  <section class="panel panel-pad" style="margin-bottom:18px;">
+    <strong>No assigned client is visible to this account.</strong>
+    <div class="meta" style="margin-top:4px;">Use the Clients page or ask a manager to assign you to the engagement.</div>
+  </section>
+<% } %>
+
+<% if (clientSummaries.length) { %>
+  <section style="margin-bottom:18px;">
+    <div class="page-head" style="margin-bottom:10px;">
+      <div>
+        <div class="sec-label" style="margin-bottom:4px;">Client programme setup</div>
+        <h2 style="margin:0;">Continue each engagement on its own terms</h2>
+        <div class="meta text-md" style="margin-top:4px;">These summaries are live guidance, not additional firm-onboarding requirements.</div>
+      </div>
+      <a href="/dashboard" class="btn btn-secondary btn-xs">All clients</a>
+    </div>
+
+    <div class="onboarding-client-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:12px;">
+      <% clientSummaries.forEach(row => { const setup = row.setup; %>
+        <article class="panel" style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <div class="sec-label"><%= row.workspace.industry || 'Client engagement' %></div>
+            <h3 style="margin:4px 0 0;font-size:16px;"><%= row.workspace.brand_display_name || row.workspace.client_name %></h3>
+          </div>
+
+          <% if (!setup.total) { %>
+            <div class="callout callout-info" style="margin:0;">
+              <strong>No services assigned</strong>
+              <div class="meta text-sm" style="margin-top:3px;">Keep the client in planning or assign the assessment programmes and operational modules in scope.</div>
+            </div>
+          <% } else { %>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;">
+              <% row.serviceNames.forEach(name => { %><span class="tag"><%= name %></span><% }) %>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">
+                <span class="meta text-sm">Scoping progress</span>
+                <strong class="text-sm"><%= setup.complete %> / <%= setup.total %></strong>
+              </div>
+              <div role="progressbar" aria-label="<%= row.workspace.client_name %> setup progress" aria-valuemin="0" aria-valuemax="<%= setup.total %>" aria-valuenow="<%= setup.complete %>" style="height:5px;background:var(--bg-subtle);border-radius:3px;overflow:hidden;margin-top:6px;">
+                <span style="display:block;height:100%;width:<%= setup.pct %>%;background:var(--accent);"></span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+              <% setup.steps.forEach((serviceStep, index) => {
+                   const statusText = serviceStep.status === 'complete' ? 'Done' : serviceStep.status === 'in_progress' ? 'In progress' : 'Not started';
+                   const statusClass = serviceStep.status === 'complete' ? 's-implemented' : serviceStep.status === 'in_progress' ? 's-progress' : 's-not-assessed';
+              %>
+                <a href="<%= serviceStep.href %>" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 11px;text-decoration:none;color:inherit;<%= index ? 'border-top:1px solid var(--border);' : '' %>">
+                  <span style="min-width:0;">
+                    <strong class="text-sm" style="display:block;"><%= serviceStep.programme %></strong>
+                    <span class="meta text-xs"><%= serviceStep.label %></span>
+                  </span>
+                  <span class="status <%= statusClass %>" style="white-space:nowrap;"><%= statusText %></span>
+                </a>
+              <% }) %>
+            </div>
+            <% if (setup.nextStep) { %>
+              <div class="meta text-sm"><strong style="color:var(--text);">Next:</strong> <%= setup.nextStep.programme %> - <%= setup.nextStep.label %></div>
+            <% } else { %>
+              <div class="meta text-sm">Every selected service has completed its setup signal.</div>
+            <% } %>
+          <% } %>
+
+          <div class="onboarding-card-action" style="margin-top:auto;display:flex;justify-content:flex-end;">
+            <a class="btn <%= setup.total && setup.nextStep ? 'btn-primary' : 'btn-secondary' %> btn-xs" href="<%= row.setupHref %>"><%= setup.total ? 'Open programme setup' : 'Assign services' %></a>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+    <% if (accessibleClientCount > clientSummaries.length) { %>
+      <div class="meta text-xs" style="margin-top:9px;">Showing <%= clientSummaries.length %> of <%= accessibleClientCount %> accessible clients. Use Clients for the full portfolio.</div>
+    <% } %>
+  </section>
+<% } %>
+
+<% if (canManageOnboarding) { %>
+  <section class="panel" style="margin-bottom:18px;">
+    <div class="panel-head">
+      <div>
+        <div class="sec-label" style="margin-bottom:4px;">Recommended firm configuration</div>
+        <h2 style="margin:0;">Operational essentials</h2>
+      </div>
+      <span class="meta">Optional</span>
+    </div>
+    <div class="onboarding-essentials-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1px;background:var(--border);">
+      <a href="/admin/users" style="padding:16px 18px;text-decoration:none;color:inherit;background:var(--bg);">
+        <div style="display:flex;justify-content:space-between;gap:12px;"><strong>Users and access</strong><span class="status <%= firmRecommendations.teamReady ? 's-implemented' : 's-not-assessed' %>"><%= firmRecommendations.teamReady ? 'Ready' : 'Review' %></span></div>
+        <div class="meta text-sm" style="margin-top:5px;line-height:1.45;">Invite firm colleagues and confirm that each person has the right role.</div>
+      </a>
+      <a href="/admin/email" style="padding:16px 18px;text-decoration:none;color:inherit;background:var(--bg);">
+        <div style="display:flex;justify-content:space-between;gap:12px;"><strong>Email identity</strong><span class="status <%= firmRecommendations.emailReady ? 's-implemented' : 's-not-assessed' %>"><%= firmRecommendations.emailReady ? 'Configured' : 'Review' %></span></div>
+        <div class="meta text-sm" style="margin-top:5px;line-height:1.45;">Set the sender name, reply address and delivery behavior for client communications.</div>
+      </a>
+    </div>
+  </section>
+<% } %>
+
+<div class="onboarding-final-actions" style="margin-top:18px;display:flex;align-items:center;justify-content:flex-end;gap:8px;">
+  <% if (canManageOnboarding && completedCount === totalSteps && !onb.completed_at) { %>
+    <form method="POST" action="/onboarding/complete"><button class="btn btn-primary">Finish firm onboarding</button></form>
+  <% } else if (canManageOnboarding && completedCount < totalSteps) { %>
+    <form method="POST" action="/onboarding/skip"><button class="btn btn-secondary btn-xs">Dismiss this guide</button></form>
+  <% } else if (!canManageOnboarding) { %>
+    <span class="meta text-xs">A firm manager controls the shared onboarding status.</span>
+  <% } else if (onb.completed_at) { %>
+    <span class="meta text-xs">Firm onboarding completed <%= String(onb.completed_at).slice(0, 10) %>.</span>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

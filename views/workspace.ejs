@@ -1,0 +1,591 @@
+<%- include('partials/header', { title: ws.client_name, user, ws, active: 'overview' }) %>
+<%
+  const hasIso27001 = Array.isArray(ws.frameworks) && ws.frameworks.includes('iso27001');
+  const isGapAssessmentOnly = hasIso27001 && engagementOutcome === 'gap_assessment_only';
+%>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">
+      <%= ws.client_name %>
+      <% if (ws.scope_confirmed_at) { %>
+        <span title="Scope confirmed on <%= ws.scope_confirmed_at %>" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight: 500;letter-spacing:0.04em;text-transform:uppercase;color:#15803d;background:rgba(22,128,61,0.08);padding:3px 8px;border-radius:12px;vertical-align:middle;margin-left:8px;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+          Scope confirmed
+        </span>
+      <% } %>
+    </h1>
+    <div class="page-subtitle">
+      <%= ws.industry || 'Industry not set' %>
+      <% if (isGapAssessmentOnly) { %>
+        · service path: Gap assessment only
+        · assessment phase: <%= gapAssessmentOverview.currentPhaseLabel %>
+      <% } else { %>
+        <% if (ws.target_cert_date) { %> · target certification <%= ws.target_cert_date %><% } %>
+        · stage: <%= (typeof derivedStage !== 'undefined' && derivedStage) ? derivedStage.label : (ws.stage || 'new').replace(/_/g, ' ') %>
+      <% } %>
+    </div>
+  </div>
+  <div class="workspace-page-actions" style="display:flex;gap:8px;align-items:stretch;">
+    <a href="/workspaces/<%= ws.id %>/<%= isGapAssessmentOnly ? 'gap-assessment/fieldwork' : 'audit-pack' %>" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:10px;padding:10px 18px;font-size:13.5px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span><%= isGapAssessmentOnly ? 'Open gap assessment' : 'Audit pack' %></span>
+      <% if (!isGapAssessmentOnly) { %><span class="text-eyebrow" style="font-weight:500;opacity:0.78;background:rgba(255,255,255,0.14);padding:2px 7px;border-radius:999px;letter-spacing:0.02em;">.zip</span><% } %>
+    </a>
+    <details style="position:relative;">
+      <summary class="btn btn-secondary text-lg" style="display:inline-flex;align-items:center;gap:6px;padding:10px 14px;cursor:pointer;height:100%;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        More exports
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </summary>
+      <div style="position:absolute;right:0;top:calc(100% + 4px);background:var(--bg);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);min-width:180px;z-index:50;overflow:hidden;">
+        <a class="text-lg" href="/workspaces/<%= ws.id %>/export/soa.csv" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-subtle)'" onmouseout="this.style.background=''">SoA <span class="meta text-eyebrow">.csv</span></a>
+        <a class="text-lg" href="/workspaces/<%= ws.id %>/export/risks.csv" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-subtle)'" onmouseout="this.style.background=''">Risks <span class="meta text-eyebrow">.csv</span></a>
+        <a class="text-lg" href="/workspaces/<%= ws.id %>/export/assets.csv" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-subtle)'" onmouseout="this.style.background=''">Assets <span class="meta text-eyebrow">.csv</span></a>
+        <a class="text-lg" href="/workspaces/<%= ws.id %>/deliverables" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;text-decoration:none;background:var(--bg-subtle);" onmouseover="this.style.background='var(--bg-muted)'" onmouseout="this.style.background='var(--bg-subtle)'">All deliverables <span class="meta text-eyebrow">+ report templates</span></a>
+      </div>
+    </details>
+  </div>
+</div>
+
+<% if (typeof setupIncomplete !== 'undefined' && setupIncomplete) { %>
+  <div class="panel workspace-setup-nudge" style="margin-bottom:18px;background:rgba(180,83,9,0.06);display:grid;grid-template-columns:42px 1fr auto;gap:14px;align-items:center;padding:14px 18px;">
+    <div style="width:42px;height:42px;border-radius:10px;background:#b45309;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div style="min-width:0;">
+      <div class="text-xs" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.05em;color:#9a3412;margin-bottom:2px;">Client setup is incomplete</div>
+      <div class="text-ink" style="font-size:14px;font-weight:500;letter-spacing:-0.005em;">Only <%= intakeAnswered %> of 25 scoping questions answered. The numbers below will be more meaningful once basic scope, headcount, and crown-jewel assets are captured.</div>
+    </div>
+    <a href="/workspaces/<%= ws.id %>/intake" class="btn btn-secondary" style="white-space:nowrap;">Continue setup →</a>
+  </div>
+<% } %>
+
+<%
+  const isoHighSev = readiness.flags.filter(f => f.severity === 'high').length;
+  const isoDaysToTarget = readiness.daysToTarget;
+  const isoTargetDate = ws.target_cert_date;
+  const isoRecordPct = readiness.records.total ? Math.round((readiness.records.found / readiness.records.total) * 100) : 0;
+  const isoTotalControls = themes.org.total + themes.people.total + themes.physical.total + themes.tech.total;
+  const isoTotalClauses = (breakdown.clauses['Implemented'] || 0) + (breakdown.clauses['Partially Implemented'] || 0) +
+                          (breakdown.clauses['Work In Progress'] || 0) + (breakdown.clauses['Not Implemented'] || 0) +
+                          (breakdown.clauses['Not Applicable'] || 0) + (breakdown.clauses['Not Assessed'] || 0);
+  const isoTotal = isoTotalClauses + isoTotalControls;
+  const isoCount = key => (breakdown.clauses[key] || 0) + (breakdown.annex[key] || 0);
+  const isoImplemented = isoCount('Implemented');
+  const isoPartial = isoCount('Partially Implemented');
+  const isoWip = isoCount('Work In Progress');
+  const isoNotAssessed = isoCount('Not Assessed');
+  const isoAssessed = isoTotal - isoNotAssessed;
+  const isoAssessedPct = isoTotal ? Math.round((isoAssessed / isoTotal) * 100) : 0;
+  const isoImplementedPct = isoTotal ? Math.round((isoImplemented / isoTotal) * 100) : 0;
+  const isoQualityScore = typeof truth !== 'undefined' ? truth.quality.score : 0;
+  const isoCriticalTruth = typeof truth !== 'undefined' ? truth.counts.critical : 0;
+  const isoHighTruth = typeof truth !== 'undefined' ? truth.counts.high : 0;
+  const isoGatesRemaining = Math.max(0, readiness.stage1GateTotal - readiness.stage1GatePassed);
+  const isoPositionLabel = readiness.stage1Ready ? 'Ready for Stage 1' : 'Not ready for Stage 1';
+%>
+
+<% if (isGapAssessmentOnly) { %>
+  <section class="iso-command-hero" aria-label="ISO 27001 gap assessment position">
+    <div class="iso-command-position">
+      <div class="iso-command-kicker">ISO 27001:2022 · Gap assessment position</div>
+      <div class="iso-command-heading">
+        <div>
+          <h2><%= gapAssessmentOverview.currentPhaseLabel %></h2>
+          <p><%= gapAssessmentOverview.currentPhaseDescription %></p>
+        </div>
+        <a class="iso-command-score" href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork" aria-label="Open governed gap assessment">
+          <strong><%= gapAssessmentOverview.coveragePct %><span>%</span></strong>
+          <small>Assessment coverage</small>
+        </a>
+      </div>
+      <div class="iso-command-track" aria-hidden="true"><span style="width:<%= gapAssessmentOverview.coveragePct %>%;"></span></div>
+      <div class="iso-command-facts">
+        <div><span>Service path</span><strong><%= gapAssessmentOverview.servicePath %></strong></div>
+        <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Governed phase</span><strong><%= gapAssessmentOverview.currentPhaseLabel %></strong></a>
+        <a href="/workspaces/<%= ws.id %>/controls"><span>Outcomes assessed</span><strong><%= gapAssessmentOverview.assessed %>/<%= gapAssessmentOverview.total %></strong></a>
+        <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Report endpoint</span><strong><%= gapAssessmentOverview.reportState %></strong></a>
+      </div>
+    </div>
+
+    <aside class="iso-command-priority">
+      <div>
+        <div class="iso-command-kicker">Contracted endpoint</div>
+        <h3><%= gapAssessmentOverview.endpointState %></h3>
+        <p><%= gapAssessmentOverview.endpoint %>. Implementation, certification audits and remediation delivery are not included unless the client continues to full certification support.</p>
+      </div>
+      <div class="iso-command-priority-foot">
+        <span><%= gapAssessmentOverview.contractClosed
+          ? 'Engagement closed'
+          : `${gapAssessmentOverview.closureBlockerCount} closure check${gapAssessmentOverview.closureBlockerCount === 1 ? '' : 's'} remaining` %></span>
+        <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork" class="btn btn-primary">Open gap assessment →</a>
+      </div>
+    </aside>
+  </section>
+
+  <div class="iso-overview-grid">
+    <section class="panel iso-assessment-panel">
+      <div class="iso-section-head">
+        <div><span class="iso-section-kicker">Delivery position</span><h2>Assessment coverage and report</h2></div>
+        <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork" class="link-muted">Open fieldwork →</a>
+      </div>
+
+      <div class="iso-progress-row">
+        <div class="iso-progress-copy"><span>Gap assessment coverage</span><strong><%= gapAssessmentOverview.coveragePct %>%</strong><small><%= gapAssessmentOverview.assessed %> of <%= gapAssessmentOverview.total %> outcomes assessed</small></div>
+        <div class="iso-progress-track"><span style="width:<%= gapAssessmentOverview.coveragePct %>%;"></span></div>
+      </div>
+      <div class="iso-progress-row">
+        <div class="iso-progress-copy"><span>Governed assessment phases</span><strong><%= gapAssessmentOverview.phaseProgressPct %>%</strong><small><%= gapAssessmentOverview.completedPhaseCount %> of <%= gapAssessmentOverview.phaseCount %> phases complete</small></div>
+        <div class="iso-progress-track"><span style="width:<%= gapAssessmentOverview.phaseProgressPct %>%;"></span></div>
+      </div>
+
+      <div class="iso-workstreams">
+        <% Object.values(themes).forEach(t => {
+             const assessedThemePct = t.total ? Math.round(t.assessed / t.total * 100) : 0;
+        %>
+          <div class="iso-workstream">
+            <span><%= t.label %></span><strong><%= t.assessed %>/<%= t.total %></strong>
+            <small><%= assessedThemePct %>% assessed</small>
+          </div>
+        <% }) %>
+      </div>
+    </section>
+
+    <section class="panel iso-assurance-panel">
+      <div class="iso-section-head"><div><span class="iso-section-kicker">Report conditions</span><h2>What prevents governed closure</h2></div></div>
+      <div class="iso-assurance-list">
+        <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Controlled report</span><strong><%= gapAssessmentOverview.reportCount %></strong><small><%= gapAssessmentOverview.reportState %></small></a>
+        <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Active fieldwork blockers</span><strong><%= gapAssessmentOverview.activeBlockers %></strong><small><%= gapAssessmentOverview.openRequests %> open evidence request<%= gapAssessmentOverview.openRequests === 1 ? '' : 's' %></small></a>
+        <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Closure checks remaining</span><strong><%= gapAssessmentOverview.contractClosed ? 0 : gapAssessmentOverview.closureBlockerCount %></strong><small><%= gapAssessmentOverview.endpointState %></small></a>
+      </div>
+      <div class="meta text-sm" style="padding:12px 16px;border-top:1px solid var(--border);line-height:1.5;">Certification-readiness percentages elsewhere in the workspace are diagnostic indicators only; certification support is not the contracted endpoint for this engagement.</div>
+    </section>
+  </div>
+
+  <section class="iso-operating-signals" style="--cols:4" aria-label="ISO 27001 gap assessment signals">
+    <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Assessment pass</span><strong><%= gapAssessmentOverview.pass ? `Pass ${gapAssessmentOverview.pass.number}` : 'Not started' %></strong><small><%= gapAssessmentOverview.pass ? gapAssessmentOverview.pass.status.replace(/_/g, ' ') : 'Start governed fieldwork' %></small></a>
+    <a href="/workspaces/<%= ws.id %>/evidence"><span>Evidence records</span><strong><%= evidenceCount %></strong><small>Available to assessment</small></a>
+    <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Open requests</span><strong><%= gapAssessmentOverview.openRequests %></strong><small>Evidence requests to resolve</small></a>
+    <a href="/workspaces/<%= ws.id %>/gap-assessment/fieldwork"><span>Published reports</span><strong><%= gapAssessmentOverview.reportCount %></strong><small>Independently approved</small></a>
+  </section>
+<% } else { %>
+  <section class="iso-command-hero" aria-label="ISO 27001 certification position">
+    <div class="iso-command-position">
+      <div class="iso-command-kicker">ISO 27001:2022 · Certification position</div>
+      <div class="iso-command-heading">
+        <div>
+          <h2><%= isoPositionLabel %></h2>
+          <p><%= readiness.stage1Ready
+            ? 'The current evidence supports the Stage 1 readiness gates. Complete the final review before representing this position externally.'
+            : `${isoGatesRemaining} Stage 1 gate${isoGatesRemaining === 1 ? '' : 's'} remain open. The position stays internal until those gates and material data-quality issues are resolved.` %></p>
+        </div>
+        <a class="iso-command-score" href="/workspaces/<%= ws.id %>/readiness" aria-label="Open ISO 27001 readiness">
+          <strong><%= readiness.stage1 %><span>%</span></strong>
+          <small>Stage 1 readiness</small>
+        </a>
+      </div>
+      <div class="iso-command-track" aria-hidden="true"><span style="width:<%= readiness.stage1 %>%;"></span></div>
+      <div class="iso-command-facts">
+        <a href="/workspaces/<%= ws.id %>/readiness"><span>Hard gates</span><strong><%= readiness.stage1GatePassed %>/<%= readiness.stage1GateTotal %></strong></a>
+        <a href="/workspaces/<%= ws.id %>/data-quality"><span>Decision quality</span><strong><%= isoQualityScore %>/100</strong></a>
+        <a href="/workspaces/<%= ws.id %>/controls"><span>Outcomes assessed</span><strong><%= isoAssessed %>/<%= isoTotal %></strong></a>
+        <div><span>Certification target</span><strong><%= isoTargetDate || 'Not set' %></strong></div>
+      </div>
+    </div>
+
+    <aside class="iso-command-priority">
+      <div>
+        <div class="iso-command-kicker">Immediate priority</div>
+        <% if (typeof nextStep !== 'undefined' && nextStep) { %>
+          <h3><%= nextStep.title %></h3>
+          <p><%= nextStep.why %></p>
+        <% } else { %>
+          <h3>Review the current certification position</h3>
+          <p>Confirm the remaining evidence, owners and due dates before the next governance review.</p>
+        <% } %>
+      </div>
+      <div class="iso-command-priority-foot">
+        <span><%= isoDaysToTarget !== null ? `${isoDaysToTarget} days to target` : 'Target date not set' %></span>
+        <% if (typeof nextStep !== 'undefined' && nextStep) { %>
+          <a href="<%= nextStep.href %>" class="btn btn-primary"><%= nextStep.cta %> →</a>
+        <% } %>
+      </div>
+    </aside>
+  </section>
+
+  <div class="iso-overview-grid">
+    <section class="panel iso-assessment-panel">
+      <div class="iso-section-head">
+        <div><span class="iso-section-kicker">Delivery position</span><h2>Assessment and implementation</h2></div>
+        <a href="/workspaces/<%= ws.id %>/controls" class="link-muted">Open assessment →</a>
+      </div>
+
+      <div class="iso-progress-row">
+        <div class="iso-progress-copy"><span>Gap assessment</span><strong><%= isoAssessedPct %>%</strong><small><%= isoAssessed %> of <%= isoTotal %> outcomes assessed</small></div>
+        <div class="iso-progress-track"><span style="width:<%= isoAssessedPct %>%;"></span></div>
+      </div>
+      <div class="iso-progress-row">
+        <div class="iso-progress-copy"><span>Implemented</span><strong><%= isoImplementedPct %>%</strong><small><%= isoImplemented %> implemented · <%= isoPartial %> partial · <%= isoWip %> in progress</small></div>
+        <div class="iso-progress-track"><span style="width:<%= isoImplementedPct %>%;"></span></div>
+      </div>
+
+      <div class="iso-workstreams">
+        <% Object.values(themes).forEach(t => {
+             const assessedThemePct = t.total ? Math.round(t.assessed / t.total * 100) : 0;
+             const implementedThemePct = t.total ? Math.round(t.implemented / t.total * 100) : 0;
+        %>
+          <div class="iso-workstream">
+            <span><%= t.label %></span><strong><%= t.assessed %>/<%= t.total %></strong>
+            <small><%= assessedThemePct %>% assessed · <%= implementedThemePct %>% implemented</small>
+          </div>
+        <% }) %>
+      </div>
+    </section>
+
+    <section class="panel iso-assurance-panel">
+      <div class="iso-section-head"><div><span class="iso-section-kicker">Assurance conditions</span><h2>What prevents a conclusion</h2></div></div>
+      <div class="iso-assurance-list">
+        <a href="/workspaces/<%= ws.id %>/data-quality"><span>Critical truth conflicts</span><strong><%= isoCriticalTruth %></strong><small><%= isoHighTruth %> additional high-priority data gaps</small></a>
+        <a href="/workspaces/<%= ws.id %>/readiness"><span>High-severity readiness gaps</span><strong><%= isoHighSev %></strong><small><%= isoGatesRemaining %> Stage 1 gates remain open</small></a>
+        <a href="/workspaces/<%= ws.id %>/nonconformities"><span>Open nonconformities</span><strong><%= ncOpen %></strong><small><%= readiness.stage2 %>% Stage 2 readiness</small></a>
+      </div>
+    </section>
+  </div>
+
+  <section class="iso-operating-signals" aria-label="ISO 27001 operating signals">
+    <a href="/workspaces/<%= ws.id %>/documents"><span>Mandatory documents</span><strong><%= readiness.records.found %>/<%= readiness.records.total %></strong><small><%= isoRecordPct %>% available</small></a>
+    <a href="/workspaces/<%= ws.id %>/assets"><span>Assets in scope</span><strong><%= assetCount %></strong><small>Information assets</small></a>
+    <a href="/workspaces/<%= ws.id %>/risks"><span>Risk register</span><strong><%= riskCount %></strong><small>Recorded risks</small></a>
+    <a href="/workspaces/<%= ws.id %>/audits"><span>Internal audits</span><strong><%= auditCount %></strong><small>Completed audits</small></a>
+    <a href="/workspaces/<%= ws.id %>/nonconformities"><span>Open NCs</span><strong><%= ncOpen %></strong><small>Require disposition</small></a>
+  </section>
+<% } %>
+
+
+<div class="workspace-overview-pair" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+  <div class="panel">
+    <div class="panel-head"><h2>Top open risks</h2><a href="/workspaces/<%= ws.id %>/risks" class="link-muted text-base">View all →</a></div>
+    <% if (openRisks.length === 0) { %>
+      <div class="t-empty">No open risks yet.</div>
+    <% } else { %>
+      <div class="divide-row">
+        <% openRisks.forEach(r => { %>
+          <a href="/workspaces/<%= ws.id %>/risks/<%= r.id %>" class="link-muted" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;">
+            <span class="text-lg"><%= r.title %></span>
+            <span class="tag <%= (r.likelihood * r.impact) >= 15 ? 'tag-danger' : (r.likelihood * r.impact) >= 8 ? 'tag-warn' : 'tag-success' %> num">L<%= r.likelihood %>·I<%= r.impact %> = <%= r.likelihood*r.impact %></span>
+          </a>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h2>Open tasks</h2><a href="/workspaces/<%= ws.id %>/tasks" class="link-muted text-base">View all →</a></div>
+    <% if (openTasks.length === 0) { %>
+      <div class="t-empty">No open tasks.</div>
+    <% } else { %>
+      <div class="divide-row">
+        <% openTasks.forEach(t => { %>
+          <div style="padding:10px 16px;display:flex;align-items:center;justify-content:space-between;">
+            <div style="min-width:0">
+              <div class="text-lg" style="font-weight:500"><%= t.title %></div>
+              <div class="meta"><%= t.assignee_name || 'unassigned' %><% if (t.due_date) { %> · due <%= t.due_date %><% } %></div>
+            </div>
+            <span class="status s-<%= t.status %>"><%= t.status.replace('_',' ') %></span>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>30-day trends</h2><span class="meta">Daily counts</span></div>
+  <div class="panel-pad workspace-trends-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;">
+    <div>
+      <div class="meta" style="margin-bottom:6px">Risks created</div>
+      <div id="tr-risks" style="height:48px;"></div>
+      <div class="text-xs text-tertiary" style="margin-top:4px;" id="tr-risks-tot"></div>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:6px">Controls implemented</div>
+      <div id="tr-controls" style="height:48px;"></div>
+      <div class="text-xs text-tertiary" style="margin-top:4px;" id="tr-controls-tot"></div>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:6px">NCs opened</div>
+      <div id="tr-ncs-open" style="height:48px;"></div>
+      <div class="text-xs text-tertiary" style="margin-top:4px;" id="tr-ncs-open-tot"></div>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:6px">NCs closed</div>
+      <div id="tr-ncs-closed" style="height:48px;"></div>
+      <div class="text-xs text-tertiary" style="margin-top:4px;" id="tr-ncs-closed-tot"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+fetch('/api/workspaces/<%= ws.id %>/trends').then(r => r.json()).then(data => {
+  const drawSpark = (id, series, color) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const w = el.clientWidth || 200, h = 48;
+    const max = Math.max(1, ...series.map(d => d.c));
+    const step = w / (series.length - 1);
+    const path = series.map((d, i) => `${i===0?'M':'L'}${(i*step).toFixed(1)},${(h - (d.c/max)*(h-6)).toFixed(1)}`).join(' ');
+    el.innerHTML = `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block;overflow:visible">
+      <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${path} L${w},${h} L0,${h} Z" fill="${color}" opacity="0.08"/>
+    </svg>`;
+    document.getElementById(id + '-tot').textContent = series.reduce((s,d) => s+d.c, 0) + ' total';
+  };
+  drawSpark('tr-risks', data.risks, '#dc2626');
+  drawSpark('tr-controls', data.controls, '#16a34a');
+  drawSpark('tr-ncs-open', data.ncs_open, '#dc2626');
+  drawSpark('tr-ncs-closed', data.ncs_closed, '#16a34a');
+});
+</script>
+
+<style>
+  .workspace-overview-pair > *,
+  .workspace-trends-grid > * { min-width: 0; }
+  .workspace-trends-grid svg { max-width: 100%; }
+  @media (max-width: 760px) {
+    .workspace-page-actions { width: 100%; flex-wrap: wrap; }
+    .workspace-page-actions > a,
+    .workspace-page-actions > details { flex: 1 1 150px; }
+    .workspace-page-actions > a,
+    .workspace-page-actions > details > summary { width: 100%; justify-content: center; }
+    .workspace-setup-nudge {
+      grid-template-columns: 42px minmax(0, 1fr) !important;
+      padding: 14px !important;
+    }
+    .workspace-setup-nudge > .btn {
+      grid-column: 1 / -1;
+      justify-content: center;
+    }
+    .workspace-action-row,
+    .workspace-activity-row {
+      align-items: flex-start !important;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .workspace-recent-title { flex-wrap: wrap; gap: 6px 10px !important; }
+    .workspace-recent-title .spark { width: min(120px, 42vw); }
+    .workspace-overview-pair { grid-template-columns: 1fr !important; }
+    .workspace-trends-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 18px 14px !important;
+    }
+  }
+  @media (max-width: 380px) {
+    .workspace-trends-grid { grid-template-columns: 1fr !important; }
+    .workspace-page-actions > * { flex-basis: 100%; }
+  }
+</style>
+
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-head">
+    <h2><%= isGapAssessmentOnly ? 'Diagnostic gaps' : 'Action items' %></h2>
+    <span class="meta"><%= isGapAssessmentOnly ? 'Report recommendations · implementation not contracted' : 'Not / Partially Implemented' %></span>
+  </div>
+  <% if (actionItems.length === 0) { %>
+    <div class="t-empty">Nothing flagged.</div>
+  <% } else { %>
+    <div class="divide-row">
+      <% actionItems.forEach(a => { %>
+        <a href="/workspaces/<%= ws.id %>/controls/<%= a.id %>" class="link-muted text-lg workspace-action-row" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;">
+          <span><%= a.title %></span>
+          <span class="status s-<%= a.status.toLowerCase().replace(/ /g,'-') %>"><%= a.status %></span>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="workspace-recent-title" style="display:flex;align-items:center;gap:14px;">
+      <h2>Recent activity</h2>
+      <% const maxC = Math.max(1, ...sparkline.map(d => d.c)); const w = 180; const h = 28; const step = w / (sparkline.length - 1); %>
+      <svg class="spark" width="<%= w %>" height="<%= h %>" viewBox="0 0 <%= w %> <%= h %>" preserveAspectRatio="none" style="overflow:visible">
+        <path d="<%= sparkline.map((d, i) => `${i===0?'M':'L'}${(i*step).toFixed(1)},${(h - (d.c/maxC)*(h-4)).toFixed(1)}`).join(' ') %>" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="<%= sparkline.map((d, i) => `${i===0?'M':'L'}${(i*step).toFixed(1)},${(h - (d.c/maxC)*(h-4)).toFixed(1)}`).join(' ') %> L<%= w %>,<%= h %> L0,<%= h %> Z" fill="var(--accent)" opacity="0.08"/>
+      </svg>
+      <span class="meta">30-day events</span>
+    </div>
+    <% if (typeof userPerms !== 'undefined' && rbac.hasPermission(userPerms, 'audit_log.view')) { %>
+      <a href="/workspaces/<%= ws.id %>/activity-log" class="link-muted text-base">Full audit log →</a>
+    <% } %>
+  </div>
+  <% if (recentActivity.length === 0) { %>
+    <div class="t-empty">No activity yet.</div>
+  <% } else { %>
+    <div class="divide-row">
+      <% recentActivity.forEach(a => { %>
+        <div class="text-lg workspace-activity-row" style="padding:8px 16px;display:flex;align-items:center;justify-content:space-between;">
+          <span><span style="font-weight:500"><%= a.user_name %></span> <span class="text-secondary"><%= a.action.replace(/_/g, ' ') %></span> <span class="meta"><%= a.entity_type || '' %></span></span>
+          <span class="meta num"><%= a.created_at %></span>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<details id="workspace-settings" style="margin-top:24px">
+  <summary class="link-muted text-lg">Client settings</summary>
+  <div class="panel panel-pad" style="margin-top:8px">
+    <form class="grid-2" method="POST" action="/workspaces/<%= ws.id %>/update">
+      <input type="hidden" name="updated_at_snapshot" value="<%= ws.updated_at || '' %>">
+      <div><label class="label">Client name</label><input class="input" name="client_name" value="<%= ws.client_name %>" required></div>
+      <div><label class="label">Industry</label><input class="input" name="industry" value="<%= ws.industry || '' %>"></div>
+      <div class="col-full"><label class="label">Scope</label><input class="input" id="scope-input" name="scope" value="<%= ws.scope || '' %>"></div>
+      <div id="workspace-certification-target-field" <%= hasIso27001 ? '' : 'hidden' %>>
+        <label class="label">Target certification date <% if (isGapAssessmentOnly) { %><span class="meta">full support only</span><% } %></label>
+        <input class="input" id="target-cert-date" name="target_cert_date" type="date" value="<%= isGapAssessmentOnly || !hasIso27001 ? '' : (ws.target_cert_date || '') %>" <%= isGapAssessmentOnly || !hasIso27001 ? 'disabled aria-disabled="true"' : '' %>>
+        <div id="gap-target-note" class="meta text-sm" <%= isGapAssessmentOnly ? '' : 'hidden' %> style="margin-top:5px;line-height:1.4;">Available only for full certification support. A gap-only engagement has no certification deadline.</div>
+      </div>
+      <div id="workspace-iso-outcome-settings" class="col-full" <%= hasIso27001 ? '' : 'hidden' %> style="padding:13px;border:1px solid var(--border);border-radius:7px;">
+        <div class="label">Contracted ISO 27001 outcome</div>
+        <% if (!hasIso27001 || engagementOutcome === 'gap_assessment_only') { %>
+          <div class="meta text-sm" style="margin-bottom:9px;line-height:1.5;"><%= hasIso27001 ? 'This engagement currently ends when the independently reviewed gap-assessment report is issued. It can be continued into full certification support without recreating the client.' : 'Choose the contracted endpoint before enabling an ISO management-system programme. This determines the delivery journey and completion gate.' %></div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;">
+            <% lifecycleOutcomes.forEach(option => { %>
+              <label class="row-center" style="align-items:flex-start;gap:7px;cursor:pointer;max-width:390px;">
+                <input type="radio" name="engagement_outcome" value="<%= option.value %>" <%= hasIso27001 ? 'required' : '' %> <%= hasIso27001 && engagementOutcome===option.value?'checked':'' %> style="margin-top:3px;">
+                <span><strong><%= option.label %></strong><span class="meta" style="display:block;line-height:1.4;"><%= option.description %></span></span>
+              </label>
+            <% }) %>
+          </div>
+          <% if (hasIso27001) { %><div class="meta text-sm" style="margin-top:9px;">Continuing to full certification support is a one-way contract change. The engagement cannot later be shortened back to gap-assessment-only.</div><% } %>
+          <% if (hasIso27001) { %><label id="outcome-upgrade-confirmation" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;align-items:flex-start;gap:8px;background:var(--bg-subtle);">
+            <input id="confirm-outcome-upgrade" type="checkbox" name="confirm_outcome_upgrade" value="1" style="margin-top:3px;">
+            <span><strong>I confirm the client has continued to full certification support.</strong><span class="meta" style="display:block;line-height:1.4;margin-top:2px;">This activates implementation, consultancy-owned documentation, internal audit, management review, Stage 1 and Stage 2 support, and finding remediation.</span></span>
+          </label><% } %>
+        <% } else { %>
+          <input type="hidden" name="engagement_outcome" value="certification_support">
+          <div><strong><%= engagementOutcomeLabel %></strong></div>
+          <div class="meta text-sm" style="margin-top:4px;line-height:1.5;">This client is contracted through implementation, documentation, internal audit, management review, and Stage 1 and Stage 2 support. To preserve delivery commitments, it cannot be changed to gap-assessment-only from client settings.</div>
+        <% } %>
+      </div>
+      <div><label class="label"><%= isGapAssessmentOnly ? 'Assessment phase' : 'Stage' %> <span class="meta">auto-derived</span></label>
+        <div style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-muted);font-size:13.5px;color:var(--text-secondary);">
+          <%= isGapAssessmentOnly
+            ? gapAssessmentOverview.currentPhaseLabel
+            : ((typeof derivedStage !== 'undefined' && derivedStage) ? derivedStage.label : (ws.stage || 'New').replace(/_/g, ' ')) %>
+        </div>
+      </div>
+
+      <div class="col-full" style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);">
+        <% const configuredFrameworks = Array.isArray(ws.frameworks) ? ws.frameworks : []; %>
+        <input type="hidden" name="frameworks_present" value="1">
+        <div class="text-xs text-tertiary" style="font-weight:500;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Assessment programmes <span class="meta" style="text-transform:none;letter-spacing:0;">optional</span></div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;">
+          <label class="row-center" style="gap:7px;<%= configuredFrameworks.includes('iso27001')?'cursor:not-allowed;opacity:.75;':'cursor:pointer;' %>"><input id="workspace-iso27001-programme" type="checkbox" name="frameworks" value="iso27001" <%= configuredFrameworks.includes('iso27001')?'checked disabled aria-disabled="true"':'' %>><span>ISO 27001:2022<%= configuredFrameworks.includes('iso27001') ? ' · governed contract' : '' %></span></label>
+          <% if (configuredFrameworks.includes('iso27001')) { %><input type="hidden" name="frameworks" value="iso27001"><% } %>
+        </div>
+      </div>
+
+      <div class="col-full" style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);">
+        <div class="text-xs text-tertiary" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Branding & sector</div>
+        <div class="meta text-sm" style="margin-bottom:10px;">Customise per-client without a code change. Used in the sidebar workspace block, the dashboard chip, and DOCX cover pages (when set).</div>
+      </div>
+      <div><label class="label">Display name (overrides client_name on cover pages)</label><input class="input" name="brand_display_name" value="<%= ws.brand_display_name || '' %>" placeholder="e.g., Acme Health Tech Inc."></div>
+      <div><label class="label">Sector</label>
+        <select class="select" name="sector">
+          <% const sectors = ['','SaaS','Fintech','Healthcare','Manufacturing','Public sector','MSP','Retail','Education','Other']; sectors.forEach(s => { %>
+            <option value="<%= s %>" <%= (ws.sector || '') === s ? 'selected' : '' %>><%= s || '- none -' %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div><label class="label">Primary color (#RRGGBB)</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="input" name="brand_primary_color" value="<%= ws.brand_primary_color || '' %>" placeholder="#0ea5e9" pattern="^#[0-9a-fA-F]{6}$" style="flex:1;font-family:monospace;">
+          <% if (ws.brand_primary_color) { %>
+            <span style="display:inline-block;width:32px;height:32px;border-radius:6px;background:<%= ws.brand_primary_color %>;border:1px solid var(--border);"></span>
+          <% } %>
+        </div>
+      </div>
+      <div><label class="label">Logo URL (path or full URL)</label><input class="input" name="brand_logo_path" value="<%= ws.brand_logo_path || '' %>" placeholder="https://…/logo.png"></div>
+
+      <div class="col-full"><button class="btn btn-primary">Save</button></div>
+    </form>
+    <% if (typeof userPerms !== 'undefined' && userPerms.has('workspace.delete')) { %>
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
+      <div class="text-xs" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.05em;color:var(--danger,#b91c1c);margin-bottom:8px;">Danger zone</div>
+      <details>
+        <summary class="text-lg" style="cursor:pointer;color:var(--danger,#b91c1c);">Delete this client</summary>
+        <div style="margin-top:10px;padding:12px;border:1px solid var(--danger,#b91c1c);border-radius:6px;background:rgba(185,28,28,0.04);">
+          <div class="meta text-base" style="line-height:1.5;margin-bottom:10px;">
+            Permanently removes this client and everything inside it: controls, gap-assessment passes, risks, evidence files (on disk and in DB), audits, MRMs, NCs, incidents, suppliers, documents, registers. Cannot be undone.
+          </div>
+          <form method="POST" action="/workspaces/<%= ws.id %>/delete" onsubmit="return appConfirmForm(event, 'Final check: delete &quot;<%= ws.client_name %>&quot; and everything under it?');">
+            <label class="label text-base">Type <strong><%= ws.client_name %></strong> to confirm</label>
+            <input class="input" name="confirm_name" required autocomplete="off" style="max-width:320px;margin-bottom:10px;">
+            <div><button class="btn btn-xs" style="background:var(--danger,#b91c1c);color:#fff;border-color:var(--danger,#b91c1c);">Delete client</button></div>
+          </form>
+        </div>
+      </details>
+    </div>
+    <% } %>
+  </div>
+</details>
+
+<script>
+  (function () {
+    const focusScope = () => {
+      if (window.location.hash !== '#workspace-settings') return;
+      const det = document.getElementById('workspace-settings');
+      const inp = document.getElementById('scope-input');
+      if (det) det.open = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (inp) {
+          inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          inp.focus({ preventScroll: true });
+          inp.select();
+        }
+      }));
+    };
+    focusScope();
+    window.addEventListener('hashchange', focusScope);
+  })();
+  <% if (!hasIso27001 || isGapAssessmentOnly) { %>
+  (function () {
+    const form = document.querySelector('#workspace-settings form[action$="/update"]');
+    const isoProgrammes = form ? Array.from(form.querySelectorAll('input[name="frameworks"][type="checkbox"]')).filter(input => input.value === 'iso27001') : [];
+    const outcomeSettings = document.getElementById('workspace-iso-outcome-settings');
+    const targetField = document.getElementById('workspace-certification-target-field');
+    const targetDate = document.getElementById('target-cert-date');
+    const targetNote = document.getElementById('gap-target-note');
+    const confirmation = document.getElementById('outcome-upgrade-confirmation');
+    const checkbox = document.getElementById('confirm-outcome-upgrade');
+    const choices = form ? form.querySelectorAll('input[name="engagement_outcome"]') : [];
+    if (!form || !isoProgrammes.length || !outcomeSettings || !targetField || !targetDate) return;
+    const syncOutcomeControls = () => {
+      const selected = form.querySelector('input[name="engagement_outcome"]:checked');
+      const isoEnabled = isoProgrammes.some(input => input.checked);
+      const fullSupport = isoEnabled && selected && selected.value === 'certification_support';
+      outcomeSettings.hidden = !isoEnabled;
+      targetField.hidden = !isoEnabled;
+      choices.forEach(input => { input.required = isoEnabled; });
+      targetDate.disabled = !fullSupport;
+      targetDate.setAttribute('aria-disabled', fullSupport ? 'false' : 'true');
+      if (!fullSupport) targetDate.value = '';
+      if (targetNote) targetNote.hidden = !isoEnabled || !!fullSupport;
+      if (confirmation && checkbox) {
+        const upgrading = <%= hasIso27001 ? 'true' : 'false' %> && fullSupport;
+        confirmation.style.display = upgrading ? 'flex' : 'none';
+        checkbox.required = !!upgrading;
+        if (!upgrading) checkbox.checked = false;
+      }
+    };
+    choices.forEach(input => input.addEventListener('change', syncOutcomeControls));
+    isoProgrammes.forEach(input => input.addEventListener('change', syncOutcomeControls));
+    syncOutcomeControls();
+  })();
+  <% } %>
+</script>
+
+<%- include('partials/footer') %>

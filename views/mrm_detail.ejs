@@ -1,0 +1,116 @@
+<%- include('partials/header', { title: 'MRM ' + (mrm.meeting_date || 'draft'), user, ws, active: 'mrms' }) %>
+
+<a href="/workspaces/<%= ws.id %>/mrms" class="link-muted text-base">← All MRMs</a>
+
+<div class="page-head" style="margin-top:8px">
+  <div>
+    <h1 class="page-title">Management review<% if (mrm.meeting_date) { %> · <%= mrm.meeting_date %><% } %></h1>
+    <div class="page-subtitle">Auto-collected inputs from this client; complete the review fields below.</div>
+  </div>
+  <a class="btn btn-secondary" href="/workspaces/<%= ws.id %>/mrms/<%= mrm.id %>/minutes.docx">Minutes (Word)</a>
+</div>
+
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>Auto-collected inputs (9.3.2)</h2><span class="meta">live · ticks off the Clause 9.3.2 inputs automatically</span></div>
+  <div class="panel-pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+    <div>
+      <div class="meta" style="margin-bottom:4px;">a) Status of prior actions</div>
+      <% if (!priorMrm) { %><div class="text-lg text-tertiary">no prior MRM</div>
+      <% } else { %>
+        <div class="text-lg"><%= priorActions.filter(t => t.status === 'done').length %> / <%= priorActions.length %> closed (from <%= priorMrm.meeting_date || 'last MRM' %>)</div>
+        <% priorActions.slice(0,3).forEach(t => { %><div class="text-base text-secondary"><%= t.title %> <span class="meta">[<%= t.status %>]</span></div><% }) %>
+      <% } %>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">b) Changes in context / risks</div>
+      <% if (riskSummary.length === 0) { %><div class="text-lg text-tertiary">no risks</div><% } %>
+      <% riskSummary.forEach(r => { %><div class="text-lg"><%= r.status %>: <%= r.c %></div><% }) %>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">c) Management system performance - KPIs</div>
+      <div class="text-lg">Coverage: <%= progress.percent %>% (<%= progress.assessed %>/<%= progress.total %>)</div>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">c.i) Nonconformities & corrective action</div>
+      <% const openN = ncs.filter(n => n.status !== 'closed' && n.status !== 'verified'); %>
+      <div class="text-lg"><strong><%= openN.length %></strong> open / <%= ncs.length %> total</div>
+      <% openN.slice(0, 3).forEach(n => { %><div class="text-base text-secondary"><%= n.title %> <span class="meta">[<%= n.severity %>]</span></div><% }) %>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">c.iii) Audit results</div>
+      <% if (audits.length === 0) { %><div class="text-lg text-tertiary">none</div><% } %>
+      <% audits.slice(0, 4).forEach(a => { %><div class="text-base"><%= a.title %> <span class="meta">[<%= a.status %>]</span></div><% }) %>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">c.iv) Incidents</div>
+      <div class="text-lg"><strong><%= incidentSummary.open || 0 %></strong> open · <%= incidentSummary.last12m || 0 %> in last 12 months</div>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">d) Suppliers</div>
+      <div class="text-lg"><%= supplierReviewStatus.reviewed_last_year || 0 %> / <%= supplierReviewStatus.total_suppliers || 0 %> reviewed last year<% if (supplierReviewStatus.overdue) { %> · <span style="color:#dc2626;"><%= supplierReviewStatus.overdue %> overdue</span><% } %></div>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">f) Risk-treatment status</div>
+      <% if (riskSummary.length === 0) { %><div class="text-lg text-tertiary">-</div>
+      <% } else { %><% riskSummary.forEach(r => { %><div class="text-base"><%= r.status %>: <%= r.c %></div><% }) %><% } %>
+    </div>
+    <div>
+      <div class="meta" style="margin-bottom:4px;">g) Improvement opportunities</div>
+      <div class="text-base text-secondary">Capture in field below.</div>
+    </div>
+  </div>
+</div>
+
+<form id="mrmReviewForm" method="POST" action="/workspaces/<%= ws.id %>/mrms/<%= mrm.id %>" class="panel" style="margin-bottom:16px">
+  <div class="panel-pad grid-2">
+    <div><label class="label">Meeting date</label><input class="input" type="date" name="meeting_date" value="<%= mrm.meeting_date || '' %>"></div>
+    <div><label class="label">Attendees</label><input class="input" name="attendees" value="<%= mrm.attendees || '' %>"></div>
+    <div><label class="label">Status</label>
+      <select class="select" name="status" style="width:200px">
+        <option value="planned" <%= mrm.status === 'planned' ? 'selected' : '' %>>Planned</option>
+        <option value="complete" <%= mrm.status === 'complete' ? 'selected' : '' %>>Complete</option>
+      </select>
+    </div>
+    <div></div>
+  </div>
+
+  <div style="border-top:1px solid var(--border);padding:12px 20px;background:var(--bg-subtle);display:flex;justify-content:space-between;align-items:center;">
+    <div class="text-xs text-tertiary" style="font-weight:500;text-transform:uppercase;letter-spacing:0.04em;">Required inputs · 9.3.2</div>
+    <button type="submit"
+            class="btn btn-secondary btn-xs"
+            formaction="/workspaces/<%= ws.id %>/mrms/<%= mrm.id %>/refresh-inputs"
+            formmethod="POST"
+            formnovalidate
+            onclick="return appConfirmClick(event, 'Re-pull NC counts, audit/finding counts, risk-register snapshot, and prior-action references from current client data? This overwrites the auto-filled fields below - your free-text additions to those fields will be lost.', { danger: false, confirmLabel: 'Refresh inputs' })"
+            title="Re-pull live data into the auto-filled fields below">↻ Refresh inputs from live data</button>
+  </div>
+  <div class="panel-pad" style="display:grid;grid-template-columns:1fr;gap:12px;">
+    <div><label class="label">Status of actions from previous MRMs</label><textarea class="textarea" name="prior_actions_status" rows="2"><%= mrm.prior_actions_status || '' %></textarea></div>
+    <div><label class="label">Changes in external & internal issues</label><textarea class="textarea" name="context_changes" rows="2"><%= mrm.context_changes || '' %></textarea></div>
+    <div><label class="label">Changes in interested parties' needs and expectations</label><textarea class="textarea" name="interested_party_changes" rows="2"><%= mrm.interested_party_changes || '' %></textarea></div>
+    <div><label class="label">Management system performance (audits, NCs, monitoring)</label><textarea class="textarea" name="performance_review" rows="3"><%= mrm.performance_review || '' %></textarea></div>
+    <div><label class="label">Feedback from interested parties</label><textarea class="textarea" name="feedback_interested_parties" rows="2"><%= mrm.feedback_interested_parties || '' %></textarea></div>
+    <div><label class="label">Risk assessment & treatment status</label><textarea class="textarea" name="risk_treatment_status" rows="2"><%= mrm.risk_treatment_status || '' %></textarea></div>
+    <div><label class="label">Opportunities for continual improvement</label><textarea class="textarea" name="improvement_opportunities" rows="2"><%= mrm.improvement_opportunities || '' %></textarea></div>
+  </div>
+
+  <div style="border-top:1px solid var(--border);padding:12px 20px;background:var(--bg-subtle);">
+    <div class="text-xs text-tertiary" style="font-weight:500;text-transform:uppercase;letter-spacing:0.04em;">Outputs · 9.3.3</div>
+  </div>
+  <div class="panel-pad" style="display:grid;grid-template-columns:1fr;gap:12px;">
+    <div><label class="label">Decisions made</label><textarea class="textarea" name="decisions" rows="3"><%= mrm.decisions || '' %></textarea></div>
+    <div><label class="label">Action items (with owners and dates)</label><textarea class="textarea" name="action_items" rows="4"><%= mrm.action_items || '' %></textarea></div>
+  </div>
+
+  <div class="panel-pad" style="border-top:1px solid var(--border);display:flex;gap:6px;">
+    <button type="submit" class="btn btn-primary">Save changes</button>
+    <button type="submit"
+            class="btn btn-danger"
+            formaction="/workspaces/<%= ws.id %>/mrms/<%= mrm.id %>/delete"
+            formmethod="POST"
+            formnovalidate
+            onclick="return appConfirmClick(event, 'Delete this management review? This cannot be undone.', { confirmLabel: 'Delete review' })">Delete</button>
+  </div>
+</form>
+
+<%- include('partials/footer') %>

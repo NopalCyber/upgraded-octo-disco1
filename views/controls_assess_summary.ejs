@@ -1,0 +1,221 @@
+<%- include('partials/header', { title: 'Control assessment', user, ws, active: 'gap-assessment-summary' }) %>
+
+<%
+  const statusRows = [
+    { key: 'Implemented', label: 'Claimed implemented', meaning: 'Recorded as operating; evidence is tested separately.' },
+    { key: 'Partially Implemented', label: 'Partially implemented', meaning: 'Coverage or consistency gaps remain.' },
+    { key: 'Work In Progress', label: 'Work in progress', meaning: 'Implementation has started but is not complete.' },
+    { key: 'Not Implemented', label: 'Not implemented', meaning: 'The requirement or control is absent.' },
+    { key: 'Not Applicable', label: 'Not applicable', meaning: 'Requires a defensible SoA exclusion basis.' },
+    { key: 'Not Assessed', label: 'Not assessed', meaning: 'No assessment conclusion has been recorded.' }
+  ];
+  const statusGapCount = gaps.length;
+  const proofGapCount = evidenceAsks.length;
+  const obligationCount = statusGapCount + proofGapCount;
+  const assessmentComplete = notAssessedCount === 0;
+  const headline = !assessmentComplete
+    ? 'Assessment incomplete'
+    : statusGapCount > 0
+      ? 'Remediation required'
+      : proofGapCount > 0
+        ? 'Assessment complete; evidence incomplete'
+        : 'Assessment defensible';
+  const headlineDetail = !assessmentComplete
+    ? `${notAssessedCount} item${notAssessedCount === 1 ? '' : 's'} still need an assessment conclusion.`
+    : statusGapCount > 0
+      ? `${statusGapCount} implementation gap${statusGapCount === 1 ? '' : 's'} require owned remediation.`
+      : proofGapCount > 0
+        ? `${proofGapCount} implementation claim${proofGapCount === 1 ? '' : 's'} cannot yet be substantiated with retained evidence.`
+        : 'Every assessed implementation claim has retained evidence on file.';
+  const cleanRef = id => id.replace('annex-','').replace('clause-','').toUpperCase();
+  const cleanTitle = title => title.replace(/^A\.[0-9.]+ /,'').replace(/^[0-9.]+ /,'');
+%>
+
+<style>
+  .cas{max-width:1160px;margin:0 auto;color:var(--text)}
+  .cas-hero{background:var(--ink);color:#fff;border-radius:12px;padding:28px 30px;margin-bottom:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:end}
+  .cas-eyebrow{font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:rgba(255,255,255,.58);margin-bottom:10px}
+  .cas-hero h1{font-family:var(--font-display);font-size:34px;line-height:1.05;letter-spacing:-.025em;margin:0 0 9px;color:#fff}
+  .cas-hero p{font-size:13px;line-height:1.55;color:rgba(255,255,255,.7);margin:0;max-width:720px}
+  .cas-hero-status{text-align:right;min-width:270px}
+  .cas-hero-status span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.56);margin-bottom:7px}
+  .cas-hero-status strong{display:block;font-family:var(--font-display);font-size:24px;line-height:1.15;font-weight:500}
+  .cas-hero-status small{display:block;font-size:11px;color:rgba(255,255,255,.6);margin-top:6px}
+  .cas-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 0 16px;border-bottom:1px solid var(--border);margin-bottom:16px}
+  .cas-toolbar-note{font-size:11px;color:var(--text-muted)}
+  .cas-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+  .cas-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .cas-metric{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 17px;min-width:0}
+  .cas-metric span{display:block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.075em;color:var(--text-muted);margin-bottom:8px}
+  .cas-metric strong{font-family:var(--font-display);font-size:27px;line-height:1;display:block;font-weight:500}
+  .cas-metric small{font-size:10px;color:var(--text-muted);display:block;margin-top:7px;line-height:1.35}
+  .cas-decision{border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:16px;overflow:hidden}
+  .cas-decision-head{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+  .cas-decision-head h2{font-family:var(--font-display);font-size:20px;margin:0 0 5px}.cas-decision-head p{margin:0;color:var(--text-secondary);font-size:12px;line-height:1.5}
+  .cas-verdict{border:1px solid var(--border-strong);border-radius:4px;padding:5px 8px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+  .cas-logic{display:grid;grid-template-columns:1fr 1fr 1.15fr}
+  .cas-logic-step{padding:15px 18px;border-right:1px solid var(--border)}.cas-logic-step:last-child{border-right:0;background:var(--bg-subtle)}
+  .cas-logic-step b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.065em;margin-bottom:6px}.cas-logic-step p{font-size:11px;line-height:1.5;color:var(--text-secondary);margin:0}
+  .cas-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+  .cas-section{border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:14px;overflow:hidden}
+  .cas-section-head{padding:14px 17px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+  .cas-section-head h2{font-size:14px;margin:0 0 4px}.cas-section-head p{font-size:10px;color:var(--text-muted);line-height:1.4;margin:0}.cas-section-count{font-family:var(--font-display);font-size:22px;line-height:1}
+  .cas-queue-row{display:grid;grid-template-columns:90px minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 17px;border-bottom:1px solid var(--border)}.cas-queue-row:last-child{border-bottom:0}
+  .cas-queue-status{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.065em}.cas-queue-main b{display:block;font-size:12px;margin-bottom:3px}.cas-queue-main span{font-size:10px;color:var(--text-muted);line-height:1.4;display:block}
+  .cas-table-wrap{overflow:auto}.cas-table{width:100%;border-collapse:collapse;font-size:11px}.cas-table th{text-align:left;padding:9px 13px;font-size:8.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);background:var(--bg-subtle);border-bottom:1px solid var(--border);white-space:nowrap}.cas-table td{padding:10px 13px;border-bottom:1px solid var(--border);vertical-align:middle}.cas-table tr:last-child td{border-bottom:0}.cas-table a{text-decoration:none;color:var(--text);font-weight:600}.cas-table a:hover{text-decoration:underline}.cas-ref{font-family:'SF Mono',Menlo,monospace;color:var(--text-muted);font-size:10px;white-space:nowrap}.cas-dim{color:var(--text-muted)}
+  .cas-table-action{text-align:right;white-space:nowrap}.cas-table-action a{color:var(--accent)}
+  .cas-formbar{display:flex;align-items:center;gap:9px;padding:10px 13px;background:var(--bg-subtle);border-bottom:1px solid var(--border);font-size:10px}.cas-formbar .spacer{flex:1}.cas-link-button{border:0;background:none;padding:0;color:var(--accent);font:inherit;font-weight:700;cursor:pointer}.cas-formbar input[type=date]{height:30px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);padding:0 8px;font-size:10px}
+  .cas-empty{padding:18px 17px;font-size:11px;color:var(--text-muted);line-height:1.5}
+  .cas-aside{position:sticky;top:18px}.cas-aside .cas-section{margin-bottom:12px}
+  .cas-check{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;align-items:center}.cas-check:last-child{border-bottom:0}.cas-check b{font-variant-numeric:tabular-nums}.cas-check span{color:var(--text-secondary)}
+  .cas-quality{padding:12px 14px;border-bottom:1px solid var(--border)}.cas-quality:last-child{border-bottom:0}.cas-quality-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px}.cas-quality strong{font-size:11px}.cas-quality p{font-size:10px;line-height:1.45;color:var(--text-muted);margin:0 0 7px}.cas-quality a{font-size:10px;font-weight:700;text-decoration:none;color:var(--accent)}
+  .cas-severity{border:1px solid currentColor;border-radius:3px;padding:3px 5px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.065em}.cas-severity.critical{color:#b42318}.cas-severity.high{color:#b54708}.cas-severity.medium{color:#946200}.cas-severity.low{color:#475467}
+  .cas-details{border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:14px;overflow:hidden}.cas-details summary{padding:13px 16px;cursor:pointer;font-size:11px;font-weight:700;display:flex;justify-content:space-between;gap:16px;list-style:none}.cas-details summary::-webkit-details-marker{display:none}.cas-details summary span{font-weight:400;color:var(--text-muted)}.cas-details[open] summary{border-bottom:1px solid var(--border)}
+  .cas-method{padding:14px 16px;font-size:10px;line-height:1.6;color:var(--text-secondary)}.cas-method p{margin:0 0 8px}.cas-method p:last-child{margin-bottom:0}
+  .cas-footer{display:flex;justify-content:space-between;gap:20px;padding:7px 2px 24px;font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+  @media(max-width:980px){.cas-layout{grid-template-columns:1fr}.cas-aside{position:static}.cas-metrics{grid-template-columns:1fr 1fr}.cas-hero{grid-template-columns:1fr}.cas-hero-status{text-align:left}.cas-logic{grid-template-columns:1fr}.cas-logic-step{border-right:0;border-bottom:1px solid var(--border)}.cas-logic-step:last-child{border-bottom:0}}
+  @media(max-width:640px){.cas-hero{padding:23px 20px}.cas-hero h1{font-size:29px}.cas-hero-status{min-width:0}.cas-metrics{grid-template-columns:1fr}.cas-toolbar{align-items:flex-start;flex-direction:column}.cas-actions{justify-content:flex-start;width:100%}.cas-actions .btn{flex:1 1 140px}.cas-queue-row{grid-template-columns:1fr}.cas-formbar{align-items:flex-start;flex-wrap:wrap}.cas-formbar .spacer{display:none;width:100%}.cas-footer{flex-direction:column}.cas-table th:nth-child(3),.cas-table td:nth-child(3){display:none}}
+  @media(max-width:430px){.cas-hero{padding:20px 16px}.cas-hero h1{font-size:25px}.cas-actions{display:grid;grid-template-columns:1fr}.cas-actions .btn{width:100%}.cas-decision-head,.cas-section-head{flex-direction:column}.cas-section-count{align-self:flex-start}}
+
+  @media (max-width: 760px) {
+    .cas-eyebrow,
+    .cas-hero-status span,
+    .cas-metric span,
+    .cas-metric small,
+    .cas-verdict,
+    .cas-logic-step b,
+    .cas-section-head p,
+    .cas-queue-status,
+    .cas-queue-main span,
+    .cas-table th,
+    .cas-ref,
+    .cas-formbar,
+    .cas-formbar input[type=date],
+    .cas-quality p,
+    .cas-quality a,
+    .cas-severity,
+    .cas-method,
+    .cas-footer
+    { font-size: 11px; }
+  }
+</style>
+
+<div class="cas">
+  <header class="cas-hero">
+    <div>
+      <div class="cas-eyebrow">ISO/IEC 27001:2022 · assessment decision</div>
+      <h1><%= headline %></h1>
+      <p><%= headlineDetail %> This page distinguishes what the team recorded from what the retained evidence can defend.</p>
+    </div>
+    <div class="cas-hero-status">
+      <span>Workspace certification verdict</span>
+      <strong><%= truth.verdict.label %></strong>
+      <small><%= truth.readiness.stage1GatePassed %>/<%= truth.readiness.stage1GateTotal %> Stage 1 gates · <%= truth.readiness.stage2GatePassed %>/<%= truth.readiness.stage2GateTotal %> Stage 2 gates</small>
+    </div>
+  </header>
+
+  <div class="cas-toolbar">
+    <div class="cas-toolbar-note">Current records · <%= new Date().toISOString().slice(0,10) %> · <%= ws.client_name %></div>
+    <div class="cas-actions">
+      <% if (proofGapCount) { %><a href="#evidence-worklist" class="btn btn-primary btn-xs">Resolve evidence gaps</a><% } %>
+      <% if (statusGapCount) { %><a href="#remediation-worklist" class="btn btn-primary btn-xs">Plan remediation</a><% } %>
+      <a href="/workspaces/<%= ws.id %>/data-quality?domain=controls&severity=all" class="btn btn-secondary btn-xs">Control quality</a>
+      <a href="/workspaces/<%= ws.id %>/controls/assess/summary.docx" class="btn btn-secondary btn-xs">Export report ↓</a>
+      <a href="/workspaces/<%= ws.id %>/controls/assess" class="btn btn-secondary btn-xs">Re-open assessment</a>
+    </div>
+  </div>
+
+  <section class="cas-metrics" aria-label="Assessment metrics">
+    <div class="cas-metric"><span>Assessment coverage</span><strong><%= assessedCount %>/<%= totalItems %></strong><small><%= assessmentComplete ? 'All items have a recorded conclusion' : `${notAssessedCount} still unassessed` %></small></div>
+    <div class="cas-metric"><span>Claimed implemented</span><strong><%= dist.Implemented %></strong><small>Self-assessed status; not an assurance opinion</small></div>
+    <div class="cas-metric"><span>Evidenced implementation</span><strong><%= evidencedImplemented %></strong><small><%= evidenceCoverage %>% of implementation claims have evidence</small></div>
+    <div class="cas-metric"><span>Open obligations</span><strong><%= obligationCount %></strong><small><%= statusGapCount %> status gaps · <%= proofGapCount %> proof gaps</small></div>
+  </section>
+
+  <section class="cas-decision">
+    <div class="cas-decision-head">
+      <div><h2>Management conclusion</h2><p>The assessment result is only decision-ready when status, evidence, and readiness gates agree.</p></div>
+      <span class="cas-verdict"><%= headline %></span>
+    </div>
+    <div class="cas-logic">
+      <div class="cas-logic-step"><b>1 · Recorded claim</b><p><%= dist.Implemented %> of <%= totalItems %> requirements and controls are marked Implemented.</p></div>
+      <div class="cas-logic-step"><b>2 · Evidence test</b><p><%= proofGapCount %> of those claims have no retained evidence mapped to the assessed item.</p></div>
+      <div class="cas-logic-step"><b>3 · Permitted conclusion</b><p><% if (proofGapCount) { %>Do not present 100% implementation as audit-ready. Close the proof gaps and re-run readiness.<% } else if (statusGapCount) { %>The evidence set may be complete, but open implementation gaps still require remediation.<% } else { %>The assessment is substantiated; certification readiness remains governed by the hard-gate verdict above.<% } %></p></div>
+    </div>
+  </section>
+
+  <div class="cas-layout">
+    <div class="cas-main">
+      <section class="cas-section">
+        <div class="cas-section-head"><div><h2>Priority worklist</h2><p>Distinct obligations, ordered by impact. Documentation gaps are shown separately but are not double-counted.</p></div><span class="cas-section-count"><%= obligationCount %></span></div>
+        <div class="cas-queue-row"><span class="cas-queue-status"><%= proofGapCount ? 'High' : 'Cleared' %></span><div class="cas-queue-main"><b>Substantiate implementation claims</b><span><%= proofGapCount ? `${proofGapCount} claims need retained evidence before they are defensible.` : 'Every implementation claim has at least one evidence record.' %></span></div><% if (proofGapCount) { %><a class="btn btn-secondary btn-xs" href="#evidence-worklist">Review <%= proofGapCount %></a><% } else { %><span class="cas-dim">No action</span><% } %></div>
+        <div class="cas-queue-row"><span class="cas-queue-status"><%= statusGapCount ? 'Action' : 'Cleared' %></span><div class="cas-queue-main"><b>Close implementation gaps</b><span><%= statusGapCount ? `${statusGapCount} items are partial, in progress, or not implemented.` : 'No assessed item is in a gap state.' %></span></div><% if (statusGapCount) { %><a class="btn btn-secondary btn-xs" href="#remediation-worklist">Review <%= statusGapCount %></a><% } else { %><span class="cas-dim">No action</span><% } %></div>
+        <div class="cas-queue-row"><span class="cas-queue-status"><%= docGaps.length ? 'Action' : 'Cleared' %></span><div class="cas-queue-main"><b>Supply governing documents</b><span><%= docGaps.length ? `${docGaps.length} gap-state items have no linked policy or procedure.` : 'Every gap-state item has a governing document mapped.' %></span></div><% if (docGaps.length) { %><a class="btn btn-secondary btn-xs" href="#document-worklist">Review <%= docGaps.length %></a><% } else { %><span class="cas-dim">No action</span><% } %></div>
+        <div class="cas-queue-row"><span class="cas-queue-status"><%= untreatedLinkedRisks.length ? 'Risk' : 'Cleared' %></span><div class="cas-queue-main"><b>Re-evaluate blocked risk treatments</b><span><%= untreatedLinkedRisks.length ? `${untreatedLinkedRisks.length} open risks rely on controls that remain in a gap state.` : 'No open risk treatment is blocked by a gap-state control.' %></span></div><% if (untreatedLinkedRisks.length) { %><a class="btn btn-secondary btn-xs" href="#risk-worklist">Review <%= untreatedLinkedRisks.length %></a><% } else { %><span class="cas-dim">No action</span><% } %></div>
+      </section>
+
+      <% if (proofGapCount) { %>
+      <section class="cas-section" id="evidence-worklist">
+        <div class="cas-section-head"><div><h2>Evidence worklist</h2><p>Implementation claims with no evidence mapped to the requirement or control.</p></div><span class="cas-section-count"><%= proofGapCount %></span></div>
+        <div class="cas-table-wrap"><table class="cas-table">
+          <thead><tr><th>Ref</th><th>Requirement or control</th><th>Recorded conclusion</th><th class="cas-table-action">Action</th></tr></thead>
+          <tbody><% evidenceAsks.forEach(item => { %><tr><td class="cas-ref"><%= cleanRef(item.id) %></td><td><a href="/workspaces/<%= ws.id %>/controls/<%= item.id %>"><%= cleanTitle(item.title) %></a></td><td class="cas-dim">Implemented · unsubstantiated</td><td class="cas-table-action"><a href="/workspaces/<%= ws.id %>/controls/<%= item.id %>">Attach evidence →</a></td></tr><% }) %></tbody>
+        </table></div>
+      </section>
+      <% } %>
+
+      <% if (statusGapCount) { %>
+      <section class="cas-section" id="remediation-worklist">
+        <div class="cas-section-head"><div><h2>Implementation remediation</h2><p>Select gap items and create owned tasks. Existing open tasks are excluded from bulk selection.</p></div><span class="cas-section-count"><%= statusGapCount %></span></div>
+        <form method="POST" action="/workspaces/<%= ws.id %>/controls/assess/summary/spawn-tasks">
+          <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+          <div class="cas-formbar"><button type="button" class="cas-link-button" onclick="pickGaps(true)">Select unassigned</button><button type="button" class="cas-link-button" onclick="pickGaps(false)">Clear</button><strong id="gapCount">0</strong> selected<span class="spacer"></span><label for="due_date">Default due</label><input type="date" name="due_date" id="due_date"><button type="submit" class="btn btn-primary btn-xs">Create tasks</button></div>
+          <div class="cas-table-wrap"><table class="cas-table"><thead><tr><th></th><th>Ref</th><th>Item</th><th>Status</th><th>Task</th></tr></thead><tbody>
+          <% gaps.forEach(g => { %><tr><td><input type="checkbox" class="gap-pick" name="iso_id" value="<%= g.id %>" data-has-task="<%= g.has_open_task ? '1' : '0' %>" onchange="updateGapCount()"></td><td class="cas-ref"><%= cleanRef(g.id) %></td><td><a href="/workspaces/<%= ws.id %>/controls/assess/<%= g.id %>"><%= cleanTitle(g.title) %></a></td><td><%= g.status %></td><td class="cas-dim"><%= g.has_open_task ? 'Open' : 'Not created' %></td></tr><% }) %>
+          </tbody></table></div>
+        </form>
+      </section>
+      <% } %>
+
+      <% if (docGaps.length) { %><section class="cas-section" id="document-worklist"><div class="cas-section-head"><div><h2>Missing governing documents</h2><p>Gap-state items without a linked policy or procedure.</p></div><span class="cas-section-count"><%= docGaps.length %></span></div><div class="cas-table-wrap"><table class="cas-table"><thead><tr><th>Ref</th><th>Item</th><th>Status</th><th class="cas-table-action">Action</th></tr></thead><tbody><% docGaps.forEach(g => { %><tr><td class="cas-ref"><%= cleanRef(g.id) %></td><td><a href="/workspaces/<%= ws.id %>/controls/<%= g.id %>"><%= cleanTitle(g.title) %></a></td><td><%= g.status %></td><td class="cas-table-action"><a href="/workspaces/<%= ws.id %>/documents">Link document →</a></td></tr><% }) %></tbody></table></div></section><% } %>
+
+      <% if (untreatedLinkedRisks.length) { %><section class="cas-section" id="risk-worklist"><div class="cas-section-head"><div><h2>Blocked risk treatments</h2><p>Open risks whose treatment relies on a gap-state control.</p></div><span class="cas-section-count"><%= untreatedLinkedRisks.length %></span></div><div class="cas-table-wrap"><table class="cas-table"><thead><tr><th>Risk</th><th>Blocking controls</th><th>Score</th><th class="cas-table-action">Action</th></tr></thead><tbody><% untreatedLinkedRisks.forEach(r => { const blocks = (r.blocking_controls || '').split(',').filter(Boolean); %><tr><td><a href="/workspaces/<%= ws.id %>/risks/<%= r.id %>"><%= r.title %></a></td><td class="cas-ref"><%= blocks.map(b => cleanRef(b.split('|')[0])).join(', ') %></td><td><%= r.likelihood * r.impact %></td><td class="cas-table-action"><a href="/workspaces/<%= ws.id %>/risks/<%= r.id %>">Review treatment →</a></td></tr><% }) %></tbody></table></div></section><% } %>
+
+      <details class="cas-details">
+        <summary>Assessment status ledger <span><%= totalItems %> items · recorded states, not a readiness score</span></summary>
+        <div class="cas-table-wrap"><table class="cas-table"><thead><tr><th>Status</th><th>Count</th><th>Share</th><th>Interpretation</th></tr></thead><tbody><% statusRows.forEach(row => { const share = totalItems ? Math.round((dist[row.key] / totalItems) * 100) : 0; %><tr><td><strong><%= row.label %></strong></td><td><%= dist[row.key] %></td><td><%= share %>%</td><td class="cas-dim"><%= row.meaning %></td></tr><% }) %></tbody></table></div>
+      </details>
+
+      <details class="cas-details">
+        <summary>Method and counting rules <span>How this page reaches its conclusion</span></summary>
+        <div class="cas-method"><p><strong>Implementation gaps</strong> are items marked Not Implemented, Partially Implemented, or Work In Progress. Not Applicable and Not Assessed are treated separately.</p><p><strong>Proof gaps</strong> are items marked Implemented with no evidence row mapped to that ISO item. A proof gap does not rewrite the recorded status; it limits the conclusion that may be drawn from it.</p><p><strong>Open obligations</strong> equal implementation gaps plus proof gaps. Missing governing documents are a subset of implementation gaps and are not counted twice.</p><p><strong>Certification verdict</strong> comes from the canonical readiness hard-gate model. Assessment completion or a high maturity percentage cannot override a failed gate.</p></div>
+      </details>
+    </div>
+
+    <aside class="cas-aside">
+      <section class="cas-section"><div class="cas-section-head"><div><h2>Readiness context</h2><p>Canonical hard-gate result</p></div></div><div class="cas-check"><span>Certification verdict</span><b><%= truth.verdict.label %></b></div><div class="cas-check"><span>Stage 1 gates</span><b><%= truth.readiness.stage1GatePassed %>/<%= truth.readiness.stage1GateTotal %></b></div><div class="cas-check"><span>Stage 1 maturity</span><b><%= truth.readiness.stage1 %>%</b></div><div class="cas-check"><span>Stage 2 gates</span><b><%= truth.readiness.stage2GatePassed %>/<%= truth.readiness.stage2GateTotal %></b></div><div class="cas-check"><span>Decision data quality</span><b><%= truth.quality.score %>/100</b></div><div style="padding:12px 14px"><a href="/workspaces/<%= ws.id %>/readiness" class="btn btn-secondary btn-sm" style="width:100%;justify-content:center">Open readiness</a></div></section>
+
+      <section class="cas-section"><div class="cas-section-head"><div><h2>Control quality checks</h2><p>Cross-record conflicts affecting this assessment</p></div><span class="cas-section-count"><%= controlsQualityIssues.length %></span></div><% if (!controlsQualityIssues.length) { %><div class="cas-empty">No open control-domain quality exceptions.</div><% } %><% controlsQualityIssues.slice(0,5).forEach(issue => { %><div class="cas-quality"><div class="cas-quality-top"><strong><%= issue.title %></strong><span class="cas-severity <%= issue.severity %>"><%= issue.severity %></span></div><p><%= issue.impact %></p><a href="<%= issue.href %>"><%= issue.cta %> →</a></div><% }) %><% if (controlsQualityIssues.length > 5) { %><div style="padding:12px 14px"><a href="/workspaces/<%= ws.id %>/data-quality?domain=controls&severity=all" class="btn btn-secondary btn-sm" style="width:100%;justify-content:center">View all <%= controlsQualityIssues.length %></a></div><% } %></section>
+
+      <section class="cas-section"><div class="cas-section-head"><div><h2>Recommended sequence</h2><p>Human-owned work, not automation</p></div></div><div class="cas-check"><span>1. Complete unassessed items</span><b><%= notAssessedCount %></b></div><div class="cas-check"><span>2. Close status gaps</span><b><%= statusGapCount %></b></div><div class="cas-check"><span>3. Retain proof</span><b><%= proofGapCount %></b></div><div class="cas-check"><span>4. Re-run readiness</span><b>Then</b></div></section>
+    </aside>
+  </div>
+
+  <footer class="cas-footer"><span>Internal assessment record</span><span>Prepared from current workspace data by <%= user.name %></span></footer>
+</div>
+
+<script>
+function updateGapCount() {
+  const count = document.querySelectorAll('input.gap-pick:checked').length;
+  const output = document.getElementById('gapCount');
+  if (output) output.textContent = count;
+}
+function pickGaps(state) {
+  document.querySelectorAll('input.gap-pick').forEach(checkbox => {
+    checkbox.checked = state && checkbox.dataset.hasTask !== '1';
+  });
+  updateGapCount();
+}
+</script>
+
+<%- include('partials/footer') %>

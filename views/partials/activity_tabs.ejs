@@ -1,0 +1,14 @@
+<%
+  const _tab = (typeof tab !== 'undefined' && tab) ? tab : 'log';
+  const _tabs = [
+    { id: 'log',       label: 'Log',       href: `/workspaces/${ws.id}/activity-log` },
+    { id: 'timeline',  label: 'Timeline',  href: `/workspaces/${ws.id}/activity-log/timeline` },
+    { id: 'anomalies', label: 'Anomalies', href: `/workspaces/${ws.id}/activity-log/anomalies` },
+    { id: 'verify',    label: 'Verify',    href: `/workspaces/${ws.id}/activity-log/verify` },
+  ];
+%>
+<div class="subtabs">
+  <% _tabs.forEach(t => { %>
+    <a href="<%= t.href %>" class="subtab <%= t.id === _tab ? 'is-active' : '' %>"><%= t.label %></a>
+  <% }) %>
+</div>

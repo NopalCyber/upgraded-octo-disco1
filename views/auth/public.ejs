@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="<%= description %>" />
+  <title><%= title %> &middot; Compliance Sphere</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>" />
+  <link rel="stylesheet" href="/public.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>" />
+</head>
+<body class="page-<%= page %>">
+  <a class="skip-link" href="#mainContent">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Compliance Sphere home">
+      <svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true">
+        <circle cx="11" cy="11" r="9.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="11" cy="11" r="2.5" fill="currentColor"/>
+      </svg>
+      <span>Compliance Sphere</span>
+    </a>
+    <nav aria-label="Public navigation">
+      <a href="/#services">Services</a>
+      <a href="/#process">How we work</a>
+      <a href="/security"<%= page === 'security' ? ' aria-current="page"' : '' %>>Security</a>
+      <a href="/privacy"<%= page === 'privacy' ? ' aria-current="page"' : '' %>>Privacy</a>
+      <a href="/terms"<%= page === 'terms' ? ' aria-current="page"' : '' %>>Terms</a>
+      <a class="nav-sign-in" href="/login">Sign in</a>
+    </nav>
+  </header>
+
+  <main id="mainContent">
+    <% if (page === 'home') {
+      const v = typeof assetVersion !== 'undefined' ? assetVersion : '0';
+      const img = function (n) { return '/img/home/' + n + '.webp?v=' + v; };
+      const f = typeof facts !== 'undefined' ? facts : { templates: 0 };
+      const services = programmes.concat([{ code: 'TPRM', formalName: 'Third-party risk management' }]);
+      const names = programmes.map(function (p) { return p.code; }).concat('third-party risk');
+      const iso = programmes.find(function (p) { return p.code === 'ISO 27001'; }) || { count: 118 };
+      const mess = [
+        { kind: 'mail', raw: 'RE: RE: FW: backup evidence (updated)', meta: '6 people · 14 messages', ref: 'A.8.13', clean: 'Information backup', status: 'Accepted', tone: 'good', at: [-330, -200, -9] },
+        { kind: 'sheet', raw: 'ISMS_tracker_FINAL_v7.xlsx', meta: 'Edited 3 weeks ago · 11 tabs', ref: 'Gap', clean: 'Gap assessment, ' + iso.count + ' of ' + iso.count + ' concluded', status: 'Issued', tone: 'good', at: [320, -225, 7] },
+        { kind: 'folder', raw: 'Evidence › 2026 › Q3 › New folder (2)', meta: '212 items, no index', ref: 'Evidence', clean: 'Evidence library, linked to requirements', status: '57 files', tone: 'ink', at: [-345, 55, 5] },
+        { kind: 'chat', raw: 'Did anyone send the auditor the SoA?', meta: '#compliance · 3 days ago', ref: 'SoA', clean: 'Statement of Applicability, version 3', status: 'Submitted', tone: 'good', at: [340, 30, -6] },
+        { kind: 'doc', raw: 'Supplier_Security_Policy_draft_v2 (edits from legal).docx', meta: 'Tracked changes · 3 copies', ref: 'A.5.19', clean: 'Supplier security policy', status: 'Ready to submit', tone: 'ink', at: [-175, 215, -4] },
+        { kind: 'note', raw: 'Who approved the risk treatment plan?', meta: 'Sticky note on the audit prep board', ref: '6.1.3', clean: 'Risk treatment plan, approved by a second reviewer', status: 'Approved', tone: 'good', at: [215, 240, 9] },
+        { kind: 'cal', raw: 'Stage 1 audit (date to be confirmed)', meta: 'Tentative · no agenda', ref: 'Stage 1', clean: 'Stage 1 audit on 14 Oct, 41 of 45 ready', status: 'On track', tone: 'good', at: [40, -300, -3] },
+        { kind: 'mail', raw: 'Reminder: access review still outstanding', meta: 'Third reminder · no reply', ref: 'A.5.18', clean: 'Access rights, with your team', status: 'Due 3 Oct', tone: 'warn', at: [-60, -50, 3] }
+      ];
+      const marks = {
+        'ISO 27001': { pre: 'ISO', mark: '27001', title: 'Information security',
+          body: 'Usually asked for by enterprise customers and in tenders. We take you from the gap assessment to the certification audit; the certificate itself comes from an accredited certification body.',
+          shot: ['heatmap', 1752, 748, 'The Annex A heatmap from an ISO 27001 gap assessment'], cap: 'Gap assessment heatmap. Each Annex A control, by theme, coloured by its conclusion.' },
+        'TPRM': { pre: '', mark: 'TPRM', title: 'Third-party risk',
+          body: 'For organisations whose suppliers and service providers hold their data or run their systems. We tier each provider by inherent risk, review its due diligence and contract, and recommend whether to onboard it. The decision stays with you, made in the portal, and any conditions are tracked until they close.' }
+      };
+      const stages = [
+        { name: 'Onboarding', we: 'Agree the scope, the stakeholders and the engagement plan with you.', you: 'Gets its portal logins and names the people we will work with.', out: 'Engagement plan' },
+        { name: 'Gap assessment', we: 'Conclude every requirement against your evidence. A second consultant reviews each conclusion.', you: 'Answers our requests and uploads the evidence.', out: 'Gap assessment report', exit: true },
+        { name: 'Implementation', we: 'Write your policies, procedures and management system documents' + (f.templates ? ', starting from our ' + f.templates + ' templates.' : '.'), you: 'Puts the controls in place and signs off each document.', out: 'Statement of Applicability and policy set' },
+        { name: 'Internal audit', we: 'Audit your management system. Each finding becomes a nonconformity with a corrective action.', you: 'Closes the corrective actions with evidence.', out: 'Internal audit report' },
+        { name: 'Management review', we: 'Prepare the review inputs and record the decisions.', you: 'Leadership holds the review and owns the decisions.', out: 'Review minutes' },
+        { name: 'Stage 1 audit', we: 'Represent you before the certification body. The auditor gets a private link that opens approved records only.', you: 'Supplies what only you hold, such as HR records.', out: 'Readiness pack' },
+        { name: 'Stage 2 audit', we: 'Represent you again, then help you close any observations or nonconformities.', you: 'Shows the auditor your controls in operation.', out: 'Closure record' }
+      ];
+      const pad = function (i) { return String(i + 1).padStart(2, '0'); };
+    %>
+      <section class="hero band" aria-labelledby="heroTitle">
+        <h1 id="heroTitle" class="hero-title"><span class="ln"><span>We prepare you for certification,</span></span> <span class="ln"><span>and sit beside you at the audit.</span></span></h1>
+        <div class="hero-foot">
+          <p class="hero-lede">Compliance Sphere is a consulting firm for <%= names.slice(0, -1).join(', ') %> and <%= names[names.length - 1] %>. We assess where you stand, write the documentation, run the internal audit and represent you before the certification body. Your team follows all of it on our platform.</p>
+          <div class="hero-actions">
+            <a class="btn btn-mint" href="<%= evaluationUrl %>">Talk to us <span aria-hidden="true">&rarr;</span></a>
+            <a class="btn btn-line" href="/login">Client sign in</a>
+          </div>
+        </div>
+      </section>
+      <figure class="hero-shot">
+        <img src="<%= img('portal-home') %>" alt="The client portal home: the team's next action, what is next for the team and what is waiting on others" width="1180" height="728" fetchpriority="high" data-zoom>
+        <figcaption>What your team sees after signing in. Every screen on this page is the platform itself, shown with sample data.</figcaption>
+      </figure>
+
+      <section class="mess" data-mess aria-labelledby="messTitle">
+        <div class="mess-stage">
+          <div class="mess-head">
+            <h2 id="messTitle">Emails, spreadsheets and shared folders become one record.</h2>
+            <p class="mess-sub">Each request, file, conclusion and approval is kept with who did what and when.</p>
+          </div>
+          <div class="mess-field">
+            <% mess.forEach(function (m) { %>
+            <div class="mcard k-<%= m.kind %>" data-mcard style="--sx:<%= m.at[0] %>;--sy:<%= m.at[1] %>;--sr:<%= m.at[2] %>">
+              <div class="m-raw" aria-hidden="true"><span class="m-icon"></span><div><strong><%= m.raw %></strong><span><%= m.meta %></span></div></div>
+              <div class="m-clean"><span class="m-ref"><%= m.ref %></span><strong><%= m.clean %></strong><span class="m-status t-<%= m.tone %>"><%= m.status %></span></div>
+            </div>
+            <% }); %>
+          </div>
+        </div>
+      </section>
+
+      <section class="fw" id="services" aria-labelledby="programmesTitle">
+        <h2 id="programmesTitle">What we work on</h2>
+        <ul class="fw-list">
+          <% services.forEach(function (p) { const m = marks[p.code] || { pre: '', mark: p.code, title: p.descriptor, body: '' }; %>
+          <li class="fw-row">
+            <div class="fw-text">
+              <span class="fw-mark"><% if (m.pre) { %><small><%= m.pre %></small><% } %><%= m.mark %></span>
+              <h3><%= m.title %></h3>
+              <p class="fw-meta"><%= p.formalName %><% if (p.count) { %>, <%= p.count %> <%= p.unit %><% } %></p>
+              <% if (m.body) { %><p class="fw-body"><%= m.body %></p><% } %>
+            </div>
+            <% if (m.shot) { %>
+            <figure class="fw-shot" data-reveal>
+              <img src="<%= img(m.shot[0]) %>" alt="<%= m.shot[3] %>" width="<%= m.shot[1] / 2 %>" height="<%= m.shot[2] / 2 %>" loading="lazy" data-zoom>
+              <figcaption><%= m.cap %></figcaption>
+            </figure>
+            <% } %>
+          </li>
+          <% }); %>
+        </ul>
+      </section>
+
+      <section class="process band" id="process" aria-labelledby="processTitle">
+        <div class="process-head">
+          <h2 id="processTitle">Who does what, stage by stage</h2>
+          <p>A certification engagement runs through all seven stages. A gap assessment engagement ends after the second, with the report.</p>
+        </div>
+        <div class="stages" data-stages>
+          <div class="st-table">
+            <div class="st-cols" aria-hidden="true"><span>Stage</span><span>We</span><span>Your team</span><span class="st-col-out">You receive</span></div>
+            <ol class="st-list">
+              <% stages.forEach(function (s, i) { %>
+              <li class="st" data-stage>
+                <h3><span class="st-n"><%= pad(i) %></span><%= s.name %></h3>
+                <p><b class="st-l">We</b><%= s.we %></p>
+                <p><b class="st-l">Your team</b><%= s.you %></p>
+                <p class="st-out"><b class="st-l">You receive</b><%= s.out %></p>
+                <% if (s.exit) { %><p class="st-exit">Gap assessment engagements end here, with the report.</p><% } %>
+              </li>
+              <% }); %>
+            </ol>
+            <p class="st-end" data-stage-end>Certificate, issued by your certification body</p>
+          </div>
+          <div class="pile" aria-hidden="true">
+            <p class="pile-head">You receive</p>
+            <ol class="pile-list">
+              <% stages.forEach(function (s, i) { %>
+              <li class="tile" data-tile><span><%= pad(i) %></span><%= s.out %></li>
+              <% if (s.exit) { %><li class="pile-exit" data-tile-exit>A gap assessment ends here</li><% } %>
+              <% }); %>
+              <li class="tile tile-cert" data-tile><span aria-hidden="true"></span>Certificate<small>issued by your certification body</small></li>
+            </ol>
+          </div>
+        </div>
+        <dl class="st-notes">
+          <div><dt>Every report is checked before you see it.</dt><dd>The consultant who writes a report cannot approve it. A second consultant does, and once approved it stays exactly as issued.</dd></div>
+          <div><dt>The record cannot be quietly changed.</dt><dd>Every upload, change and approval is logged with who did it and when. The log is sealed, so an edit to an old entry shows up when the log is checked.</dd></div>
+        </dl>
+      </section>
+
+      <section class="closing" aria-labelledby="closingTitle">
+        <h2 id="closingTitle">Start with a gap assessment.</h2>
+        <div class="closing-body">
+          <p>Tell us what you need, your timeline and what is already in place. We will scope the assessment and walk you through how the work would run. How we protect your data is set out in the <a href="/security">security overview</a>.</p>
+          <div class="hero-actions">
+            <a class="btn btn-ink" href="<%= evaluationUrl %>">Talk to us <span aria-hidden="true">&rarr;</span></a>
+            <a class="btn btn-ghost" href="/login">Client sign in</a>
+          </div>
+        </div>
+      </section>
+
+      <dialog class="zoom" data-zoom-dialog aria-label="Screenshot">
+        <button type="button" class="zoom-close" data-zoom-close aria-label="Close">&times;</button>
+        <img alt="">
+      </dialog>
+    <% } else if (page === 'access') { %>
+      <section class="prose-page">
+        <p class="eyebrow">Controlled access</p>
+        <h1>Access starts with an invitation.</h1>
+        <p class="lede">Self-sign-up is disabled. Each account must be assigned to the correct consulting firm or client workspace before it can sign in.</p>
+        <% if (typeof accessNotice !== 'undefined' && accessNotice) { %><p class="notice" role="status"><%= accessNotice %></p><% } %>
+        <h2>What happens next</h2>
+        <ol>
+          <li>Request an evaluation or contact the person who shared this site.</li>
+          <li>An administrator creates the appropriate role and sends a single-use invitation.</li>
+          <li>You set your password and enter only the workspace assigned to you.</li>
+        </ol>
+        <div class="actions"><a class="button primary" href="<%= evaluationUrl %>">Request an evaluation</a><a class="button secondary" href="/login">I already have access</a></div>
+      </section>
+    <% } else if (page === 'security') { %>
+      <section class="prose-page">
+        <p class="eyebrow">Security overview</p>
+        <h1>Security boundaries should be testable.</h1>
+        <p class="lede">The product implements application controls for tenant separation, role-restricted actions, governed records and external sharing. The operating organization remains responsible for secure configuration, infrastructure and monitoring.</p>
+        <div class="detail-grid">
+          <article><h2>Identity and access</h2><p>Accounts are invitation-only. Firm and workspace membership are checked on protected actions, sensitive administration is permission-gated, and password reset or account deactivation invalidates existing sessions.</p></article>
+          <article><h2>Application protection</h2><p>State-changing browser requests use CSRF protection. Session cookies are HTTP-only and SameSite-protected, with secure cookies required in production. Controlled document HTML is sanitized before display.</p></article>
+          <article><h2>External sharing</h2><p>Auditor links use high-entropy tokens stored as hashes. Shared document views are limited to approved or published records and sanitize controlled content.</p></article>
+          <article><h2>Records and evidence</h2><p>Governed versions, review decisions and audit events preserve decision history. Production upload processing requires malware scanning when deployed with the documented configuration.</p></article>
+        </div>
+        <div class="caveat"><strong>Deployment evidence matters.</strong><p>Encryption keys, TLS, backups, malware-scanner health, logging, patching and infrastructure access depend on the operator's deployment. Ask the operator to demonstrate these controls for the environment you will use.</p></div>
+        <h2>Report a security issue</h2>
+        <% if (securityEmail) { %>
+          <p>Email <a href="mailto:<%= securityEmail %>?subject=Security%20report"><%= securityEmail %></a>. Do not include live secrets or personal data in the first message.</p>
+        <% } else { %>
+          <p>Use the <a href="/contact?topic=security">security contact path</a> or contact the organization that gave you access. Do not include live secrets or personal data in the first message.</p>
+        <% } %>
+        <p>A machine-readable disclosure contact is available at <a href="/.well-known/security.txt">/.well-known/security.txt</a>.</p>
+      </section>
+    <% } else if (page === 'privacy') { %>
+      <section class="prose-page">
+        <p class="eyebrow">Privacy</p>
+        <h1>Privacy responsibilities are shared with the operator.</h1>
+        <p class="lede">Compliance Sphere is deployed for an organization. That organization determines why workspace data is processed and should provide the privacy notice, retention schedule and contact applicable to its deployment.</p>
+        <h2>Data the service may process</h2>
+        <ul><li>Account, firm, workspace and role information.</li><li>Assessment responses, requests, evidence, documents, findings, comments and approvals.</li><li>Security and audit records such as sign-in activity, actor, action and timestamp.</li><li>Files deliberately uploaded by authorized users.</li></ul>
+        <h2>Browser storage</h2>
+        <p>Essential cookies maintain authenticated sessions and request protection. The interface may store display preferences and campaign parameters in your browser; it does not need to send those optional values to a third-party analytics service.</p>
+        <h2>Retention and rights</h2>
+        <p>Retention, access, correction, export and deletion handling are set by the operating organization and may be limited by contractual, legal or audit-record obligations. Contact that organization for a request relating to your data.</p>
+        <p><a href="/contact?topic=privacy">Find the appropriate contact</a>.</p>
+      </section>
+    <% } else if (page === 'terms') { %>
+      <section class="prose-page">
+        <p class="eyebrow">Terms of use</p>
+        <h1>Use the service only within your authorization.</h1>
+        <p class="lede">These product-level terms support evaluation and authorized use. The contract and policies of the organization operating your deployment also apply and take precedence where required.</p>
+        <h2>Authorized use</h2>
+        <p>Use only the account, firm, client workspace and records assigned to you. Do not share invitations, passwords or external-access links, and do not upload material you are not permitted to process.</p>
+        <h2>Security testing</h2>
+        <p>Do not probe, scan, disrupt or attempt to bypass controls unless the operating organization has given you written authorization defining the target and test window. Report suspected vulnerabilities through the <a href="/security">security page</a>.</p>
+        <h2>No certification or professional-advice claim</h2>
+        <p>The software helps organize GRC work. Its use does not itself certify conformity, guarantee security, replace professional judgment or constitute legal advice.</p>
+        <h2>Availability and changes</h2>
+        <p>Evaluation environments may change or be withdrawn. The operator is responsible for service commitments, data recovery and notice of material terms applicable to its users.</p>
+      </section>
+    <% } else if (page === 'contact') { %>
+      <section class="prose-page">
+        <p class="eyebrow"><%= topic === 'security' ? 'Security contact' : topic === 'privacy' ? 'Privacy contact' : 'Get in touch' %></p>
+        <h1><%= topic === 'security' ? 'Report a security concern.' : topic === 'privacy' ? 'Contact the deployment operator.' : 'Tell us about your compliance programme.' %></h1>
+        <% if (topic === 'security') { %>
+          <p class="lede">Describe the affected page, observed behaviour and a safe way to reproduce it. Do not send passwords, access tokens, production evidence or unnecessary personal data.</p>
+        <% } else if (topic === 'privacy') { %>
+          <p class="lede">The organization operating this deployment handles privacy requests for its users and workspace data.</p>
+        <% } else { %>
+          <p class="lede">Let us know the framework or service you are considering, your timeline, and what is already in place, such as an earlier assessment or a booked certification audit.</p>
+        <% } %>
+        <% if (evaluationUrl !== '/contact' && topic === 'evaluation') { %>
+          <a class="button primary" href="<%= evaluationUrl %>">Open the contact form</a>
+        <% } else if ((topic === 'security' ? securityEmail : contactEmail)) { const email = topic === 'security' ? securityEmail : contactEmail; %>
+          <a class="button primary" href="mailto:<%= email %>?subject=<%= topic === 'security' ? 'Security%20report' : topic === 'privacy' ? 'Privacy%20request' : 'Compliance%20programme%20enquiry' %>">Email <%= email %></a>
+        <% } else { %>
+          <div class="caveat"><strong>No public contact has been configured for this deployment.</strong><p>Reply to the person who shared this address or contact the organization operating the site. Ask them to configure the appropriate evaluation, privacy or security contact before external use.</p></div>
+        <% } %>
+        <% if (topic === 'security') { %><p>Read the <a href="/security">security overview</a> before submitting a report.</p><% } %>
+      </section>
+    <% } %>
+  </main>
+
+  <footer class="site-footer">
+    <span>&copy; <%= new Date().getFullYear() %> Compliance Sphere</span>
+    <nav aria-label="Footer navigation"><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/contact">Contact</a></nav>
+  </footer>
+  <% if (page === 'home') { %><script src="/home.js?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>" defer></script><% } %>
+</body>
+</html>

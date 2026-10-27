@@ -1,0 +1,56 @@
+services:
+  isms:
+    build: .
+    image: "${ISMS_IMAGE:-iso27001-tool:local}"
+    container_name: iso27001-tool
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - APP_VERSION=${APP_VERSION:-development}
+      - ISMS_BACKUP_DIR=/app/data/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get('http://127.0.0.1:3000/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    stop_grace_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+
+  db:
+    image: postgres:16.4
+    container_name: iso27001-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=isms
+      - POSTGRES_USER=isms
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_INITDB_ARGS=--locale=C --encoding=UTF8
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "isms", "-d", "isms", "-h", "127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

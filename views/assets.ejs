@@ -1,0 +1,128 @@
+<%- include('partials/header', { title: 'Assets', user, ws, active: 'assets' }) %>
+
+<%
+  const canEditAssets = rbac.hasPermission(userPerms, 'asset.update');
+  const canDeleteAssets = rbac.hasPermission(userPerms, 'asset.delete');
+%>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Asset inventory</h1>
+  </div>
+  <div class="row">
+    <a href="/workspaces/<%= ws.id %>/assets/import" class="btn btn-secondary" title="Bulk-load assets from a CSV - the fast way to start an engagement">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Import CSV
+    </a>
+    <button onclick="document.getElementById('newAsset').classList.toggle('hidden')" class="btn btn-primary">Add asset</button>
+  </div>
+</div>
+
+<div id="newAsset" class="hidden panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>Add asset</h2></div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/assets" class="panel-pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+    <div style="grid-column:1/3"><label class="label">Name</label><input class="input" name="name" required></div>
+    <div><label class="label">Type</label>
+      <select class="select" name="type">
+        <option value="information">Information</option>
+        <option value="hardware">Hardware</option>
+        <option value="software">Software</option>
+        <option value="service">Service</option>
+        <option value="people">People</option>
+        <option value="intangible">Intangible</option>
+      </select>
+    </div>
+    <div><label class="label">Classification</label>
+      <select class="select" name="classification">
+        <option value="public">Public</option>
+        <option value="internal" selected>Internal</option>
+        <option value="confidential">Confidential</option>
+        <option value="restricted">Restricted</option>
+      </select>
+    </div>
+    <div style="grid-column:2/-1"><label class="label">Owner</label><input class="input" name="owner_name" placeholder="Person or team"></div>
+    <div><label class="label">Confidentiality</label>
+      <select class="select" name="cia_c"><option value="1">1 Low</option><option value="2" selected>2 Med</option><option value="3">3 High</option></select>
+    </div>
+    <div><label class="label">Integrity</label>
+      <select class="select" name="cia_i"><option value="1">1 Low</option><option value="2" selected>2 Med</option><option value="3">3 High</option></select>
+    </div>
+    <div><label class="label">Availability</label>
+      <select class="select" name="cia_a"><option value="1">1 Low</option><option value="2" selected>2 Med</option><option value="3">3 High</option></select>
+    </div>
+    <div class="col-full"><label class="label">Description</label><textarea class="textarea" name="description" rows="2"></textarea></div>
+
+    <div class="col-full" style="border-top:1px dashed var(--border);padding-top:10px;margin-top:6px;">
+      <div class="meta text-xs" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Business Impact (optional)</div>
+    </div>
+    <div><label class="label">Business criticality</label>
+      <select class="select" name="business_criticality">
+        <option value="">- not assessed -</option>
+        <option value="low">Low - minor inconvenience</option>
+        <option value="medium">Medium - degraded operation</option>
+        <option value="high">High - significant impact</option>
+        <option value="critical">Critical - business-stopping</option>
+      </select>
+    </div>
+    <div><label class="label">RTO (hours) <span class="meta">recovery time</span></label><input class="input" type="number" min="0" name="rto_hours" placeholder="e.g., 4"></div>
+    <div><label class="label">RPO (hours) <span class="meta">data loss tolerance</span></label><input class="input" type="number" min="0" name="rpo_hours" placeholder="e.g., 1"></div>
+    <div class="col-full"><label class="label">BIA notes</label><textarea class="textarea" name="bia_notes" rows="2" placeholder="What breaks if this asset is down? Who depends on it?"></textarea></div>
+
+    <div class="col-full"><button class="btn btn-primary">Save asset</button></div>
+  </form>
+</div>
+
+<div class="panel" style="overflow:hidden">
+  <table class="t">
+    <thead><tr>
+      <th>Name</th><th style="width:110px">Type</th><th style="width:130px">Classification</th>
+      <th style="width:120px">Owner</th><th style="width:70px">CIA</th>
+      <th style="width:90px" title="Business criticality">BIA</th>
+      <th style="width:120px" title="RTO / RPO in hours">RTO / RPO</th>
+      <th style="width:120px"></th>
+    </tr></thead>
+    <tbody>
+      <% assets.forEach(a => {
+           const biaColor = a.business_criticality === 'critical' ? '#b91c1c'
+             : a.business_criticality === 'high' ? '#ea580c'
+             : a.business_criticality === 'medium' ? '#a16207'
+             : a.business_criticality === 'low' ? 'var(--text-secondary)' : 'var(--text-tertiary)';
+      %>
+        <tr>
+          <td style="font-weight:500"><a class="link-muted" href="/workspaces/<%= ws.id %>/assets/<%= a.id %>"><%= a.name %></a></td>
+          <td class="text-secondary text-base" style="text-transform:capitalize;"><%= a.type || '-' %></td>
+          <td><span class="tag <%= a.classification === 'restricted' ? 'tag-danger' : a.classification === 'confidential' ? 'tag-warn' : a.classification === 'internal' ? 'tag-info' : 'tag-neutral' %>"><%= a.classification || '-' %></span></td>
+          <td class="text-secondary text-base"><%= a.owner_name || '-' %></td>
+          <td class="num meta"><%= a.cia_c %>·<%= a.cia_i %>·<%= a.cia_a %></td>
+          <td style="font-size:11.5px;font-weight: 500;color:<%= biaColor %>;text-transform:uppercase;"><%= a.business_criticality || '-' %></td>
+          <td class="num meta text-sm"><%= a.rto_hours != null ? a.rto_hours + 'h' : '-' %> / <%= a.rpo_hours != null ? a.rpo_hours + 'h' : '-' %></td>
+          <td style="text-align:right;white-space:nowrap;">
+            <% if (canEditAssets) { %><a class="btn btn-ghost btn-xs" href="/workspaces/<%= ws.id %>/assets/<%= a.id %>?edit=1#asset-edit">Edit</a><% } %>
+            <% if (canDeleteAssets) { %>
+              <form method="POST" action="/workspaces/<%= ws.id %>/assets/<%= a.id %>/delete" style="display:inline" onsubmit="return appConfirmForm(event, 'Delete this asset? Linked risks and evidence may be affected.')">
+                <button class="btn btn-ghost btn-xs text-danger">Delete</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (assets.length === 0) { %>
+        <tr><td colspan="8" style="padding:0;">
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            </div>
+            <div class="empty-title">Build the asset inventory</div>
+            <div class="empty-sub">A.5.9 requires identifying information and associated assets with owners. Add information, software, hardware, services, people, and intangibles in scope.</div>
+            <div class="row" style="justify-content:center;">
+              <a href="/workspaces/<%= ws.id %>/assets/import" class="btn btn-secondary">Import from CSV</a>
+              <button onclick="document.getElementById('newAsset').classList.toggle('hidden')" class="btn btn-primary">Add asset</button>
+            </div>
+          </div>
+        </td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/footer') %>

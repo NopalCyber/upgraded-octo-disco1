@@ -1,0 +1,46 @@
+<%
+  const iso27001Catalog = (typeof allIsoItems !== 'undefined' && allIsoItems) ? allIsoItems : [];
+  const enabledCatalogs = [
+    { key: 'iso27001', label: 'ISO 27001', count: iso27001Catalog.length }
+  ].filter(catalog => catalog.count > 0);
+  const initialFramework = enabledCatalogs.length ? enabledCatalogs[0].key : '';
+%>
+
+<div class="evidence-framework-picker" data-evidence-picker>
+  <% if (enabledCatalogs.length) { %>
+    <div class="evidence-framework-tabs" role="tablist" aria-label="Framework catalog">
+      <% enabledCatalogs.forEach((catalog, index) => { %>
+        <button type="button" role="tab" class="evidence-framework-tab<%= index === 0 ? ' active' : '' %>"
+                data-picker-tab="<%= catalog.key %>" aria-selected="<%= index === 0 ? 'true' : 'false' %>"
+                onclick="switchEvidenceFramework(this)">
+          <span><%= catalog.label %></span><span class="evidence-framework-count"><%= catalog.count %></span>
+        </button>
+      <% }) %>
+    </div>
+    <input type="search" class="input upload-filter text-md"
+           placeholder="<%= (typeof placeholderText !== 'undefined' && placeholderText) ? placeholderText : 'Filter by reference or requirement name' %>"
+           aria-label="Filter framework requirements" oninput="filterPicker(this)">
+
+    <% if (iso27001Catalog.length) { %>
+      <div class="upload-list" data-picker-panel="iso27001" <%= initialFramework === 'iso27001' ? '' : 'hidden' %>>
+        <% iso27001Catalog.forEach(item => {
+             const code = item.id.replace(/^annex-/,'').replace(/^clause-/,'');
+             const label = item.title.replace(/^A\.[0-9.]+ /,'').replace(/^[\d.]+\s+/,'');
+        %>
+          <label class="ev-pick" data-search="<%= (code + ' ' + label + ' ' + item.title).toLowerCase().replace(/"/g,'') %>">
+            <input type="checkbox" name="iso_item_id" value="<%= item.id %>" onchange="updatePickCount(this.closest('form'))">
+            <span class="ev-pick-code"><%= code.toUpperCase() %></span>
+            <span class="ev-pick-label"><%= label %></span>
+          </label>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <div class="evidence-picker-footer">
+      <div class="meta pick-count-readout text-xs"><span class="pick-count">0</span> selected across enabled frameworks</div>
+      <button type="button" class="btn btn-ghost btn-xs text-xs" onclick="clearPicker(this.closest('form'))">Clear selection</button>
+    </div>
+  <% } else { %>
+    <div class="empty-state compact">No framework catalog is enabled for this client.</div>
+  <% } %>
+</div>

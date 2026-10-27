@@ -1,0 +1,154 @@
+<%- include('partials/header', { title: q.template_name, user, ws, active: 'vendors' }) %>
+
+<a href="/workspaces/<%= ws.id %>/vendors/<%= q.supplier_id %>?tab=questionnaires" class="link-muted text-base">← Back to <%= q.supplier_name %></a>
+
+<div class="page-head" style="margin-top:8px">
+  <div>
+    <h1 class="page-title"><%= q.template_name %></h1>
+    <div class="page-subtitle"><%= q.supplier_name %> · <%= q.tpl_description || '' %></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <% if (q.score !== null) { %>
+      <span class="tag <%= q.score>= 80 ? 'tag-success' : q.score >= 60 ? 'tag-warn' : 'tag-danger' %> text-xl" style="padding:4px 12px;font-weight: 500;">Score: <%= q.score %>%</span>
+    <% } %>
+    <span class="status s-<%= q.status === 'reviewed' ? 'done' : q.status === 'responded' ? 'in_review' : 'todo' %>"><%= q.status %></span>
+  </div>
+</div>
+
+<div class="panel kpi" style="margin-bottom:16px;display:flex;justify-content:space-around;text-align:center;">
+  <div><div class="kpi-num num"><%= q.total_questions %></div><div class="kpi-label">Total questions</div></div>
+  <div><div class="kpi-num num"><%= q.answered_questions %></div><div class="kpi-label">Answered</div></div>
+  <div>
+    <div class="kpi-num num" style="color:<%= q.score === null ? 'var(--text-tertiary)' : q.score >= 80 ? '#15803d' : q.score >= 60 ? '#a16207' : '#b91c1c' %>"><%= q.score === null ? '-' : q.score + '%' %></div>
+    <div class="kpi-label">Score</div>
+  </div>
+  <div>
+    <div class="kpi-num num"><%= q.risk_rating ? q.risk_rating : '-' %></div>
+    <div class="kpi-label">Risk rating</div>
+  </div>
+</div>
+
+<%
+  const shared = !!(q.invitation_status && q.invitation_status !== 'not_sent');
+  const done = !!q.external_completed_at;
+  const expired = latestInvite && latestInvite.expires_at && !done && new Date(latestInvite.expires_at) < new Date();
+  const prefill = q.external_email || ((q.supplier_contact && q.supplier_contact.includes('@')) ? q.supplier_contact : '');
+%>
+<div class="panel" style="margin-bottom:16px;">
+  <div class="panel-head">
+    <h2>Send to vendor</h2>
+    <% if (shared && done) { %><span class="tag tag-success">Responded <%= (q.external_completed_at || '').slice(0,10) %></span>
+    <% } else if (expired) { %><span class="tag tag-danger">Link expired</span>
+    <% } else if (shared) { %><span class="tag tag-warn">Awaiting response</span>
+    <% } else { %><span class="tag tag-neutral">Not sent</span><% } %>
+  </div>
+  <div class="panel-pad">
+    <% if (inviteLink) { %>
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:10px;">
+        <input id="qLink" class="input text-base" readonly value="<%= inviteLink %>" style="flex:1;font-family:ui-monospace,monospace;font-size:12px;">
+        <button type="button" class="btn btn-secondary btn-xs" id="qCopy">Copy link</button>
+      </div>
+      <div class="meta" style="margin-bottom:12px;">This link is shown once. It is stored only as a cryptographic hash and cannot be recovered later.</div>
+    <% } else if (shared && latestInvite) { %>
+      <div class="meta" style="margin-bottom:12px;">Sent to <strong><%= latestInvite.email %></strong><% if (latestInvite.expires_at) { %> · expires <%= latestInvite.expires_at.slice(0,10) %><% } %>. Resending revokes the previous link.</div>
+    <% } %>
+    <form method="POST" action="/workspaces/<%= ws.id %>/vendors/<%= q.supplier_id %>/questionnaires/<%= q.id %>/share">
+      <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+      <div class="row" style="gap:8px;align-items:end;">
+        <div style="flex:1"><label class="label">Contact name</label><input name="name" class="input" value="<%= q.external_contact_name || '' %>" placeholder="Vendor security lead"></div>
+        <div style="flex:1.4"><label class="label">Vendor contact email</label><input type="email" name="email" class="input" value="<%= prefill %>" placeholder="security@vendor.com" required></div>
+        <button class="btn btn-primary" type="submit"><%= done ? 'Send a new request' : (shared ? 'Resend & refresh link' : 'Email questionnaire') %></button>
+      </div>
+      <div class="meta" style="margin-top:8px;">We'll email a secure link to complete the questionnaire; no account needed. You'll be notified when they respond.</div>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  var i = document.getElementById('qLink');
+  var b = document.getElementById('qCopy');
+  if (b && i) b.addEventListener('click', function () {
+    i.select();
+    navigator.clipboard && navigator.clipboard.writeText(i.value);
+    b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy link'; }, 1500);
+  });
+})();
+</script>
+
+<%
+  const aMap = (typeof attachMap !== 'undefined' && attachMap) ? attachMap : {};
+  function fmtSize(b){ if(!b) return ''; if(b < 1024) return b + ' B'; if(b < 1048576) return Math.round(b/1024) + ' KB'; return (b/1048576).toFixed(1) + ' MB'; }
+%>
+<form method="POST" enctype="multipart/form-data" action="/workspaces/<%= ws.id %>/vendors/<%= q.supplier_id %>/questionnaires/<%= q.id %>">
+  <% Object.keys(sections).forEach(secName => { %>
+    <div class="panel" style="margin-bottom:14px;">
+      <div class="panel-head"><h2><%= secName %></h2><span class="meta"><%= sections[secName].length %> questions</span></div>
+      <div class="divide-row">
+        <% sections[secName].forEach(qu => {
+          const r = respMap[qu.id] || {};
+          const isCorrect = r.answer && qu.expected_answer && r.answer.toLowerCase() === qu.expected_answer.toLowerCase();
+          const isWrong = r.answer && qu.expected_answer && r.answer.toLowerCase() !== qu.expected_answer.toLowerCase();
+        %>
+          <div style="padding:12px 16px;<%= isWrong ? 'background:#fef2f2;' : isCorrect ? 'background:#f0fdf4;' : '' %>">
+            <div style="display:flex;align-items:flex-start;gap:12px;">
+              <div style="flex:1;">
+                <div class="text-lg" style="font-weight:500;line-height:1.4;"><%= qu.question %></div>
+                <% if (qu.iso_control_ref) { %><div class="meta" style="margin-top:3px;">→ <%= qu.iso_control_ref %></div><% } %>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0;">
+                <% ['yes','partial','no','na'].forEach(opt => { %>
+                  <label style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid <%= r.answer === opt ? 'var(--accent)' : 'var(--border-strong)' %>;background:<%= r.answer === opt ? 'var(--accent-soft)' : 'var(--bg)' %>;border-radius:6px;font-size:12px;cursor:pointer;text-transform:capitalize;font-weight:<%= r.answer === opt ? '500' : '400' %>;">
+                    <input type="radio" name="answer_<%= qu.id %>" value="<%= opt %>" <%= r.answer === opt ? 'checked' : '' %> style="display:none">
+                    <%= opt %>
+                  </label>
+                <% }) %>
+              </div>
+            </div>
+            <input type="text" name="comment_<%= qu.id %>" class="input text-base" value="<%= r.comment || '' %>" placeholder="Comment / evidence (optional)" style="margin-top:8px;">
+            <% const atts = aMap[qu.id] || []; %>
+            <% if (atts.length) { %>
+              <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
+                <% atts.forEach(a => { %>
+                  <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+                    <span style="color:var(--text-tertiary);flex-shrink:0;display:inline-flex;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
+                    <a href="/workspaces/<%= ws.id %>/vendors/<%= q.supplier_id %>/questionnaires/<%= q.id %>/attachments/<%= a.id %>/download" download style="font-weight:500;color:var(--text);text-decoration:underline;text-underline-offset:2px;"><%= a.filename %></a>
+                    <span class="meta"><%= a.source === 'consultant' ? 'added by reviewer' : 'from vendor' %><% if (a.size_bytes) { %> · <%= fmtSize(a.size_bytes) %><% } %></span>
+                    <button type="submit" form="qadel_<%= a.id %>" class="btn btn-secondary btn-xs" style="margin-left:auto;">Remove</button>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <input type="file" name="file_<%= qu.id %>" multiple style="font-size:12px;color:var(--text-secondary);">
+              <span class="meta">Attach evidence (optional)</span>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  <% }) %>
+
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-head"><h2>Reviewer notes</h2></div>
+    <div class="panel-pad grid-2">
+      <div><label class="label">Reviewer</label><input class="input" name="reviewer" value="<%= q.reviewer || '' %>"></div>
+      <div></div>
+      <div class="col-full"><label class="label">Reviewer comments</label><textarea class="textarea" name="reviewer_comments" rows="3"><%= q.reviewer_comments || '' %></textarea></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button name="action" value="save" class="btn btn-secondary">Save draft</button>
+    <button name="action" value="submit" class="btn btn-primary">Submit responses</button>
+    <button name="action" value="review" class="btn btn-accent">Mark reviewed</button>
+    <div style="flex:1;"></div>
+    <button type="submit" form="qDeleteForm" class="btn btn-danger">Delete</button>
+  </div>
+</form>
+
+<form id="qDeleteForm" method="POST" action="/workspaces/<%= ws.id %>/vendors/<%= q.supplier_id %>/questionnaires/<%= q.id %>/delete" onsubmit="return appConfirmForm(event, 'Delete this questionnaire and responses?')" style="display:none"></form>
+<% Object.keys(sections).forEach(secName => { sections[secName].forEach(qu => { (aMap[qu.id] || []).forEach(a => { %>
+<form id="qadel_<%= a.id %>" method="POST" action="/workspaces/<%= ws.id %>/vendors/<%= q.supplier_id %>/questionnaires/<%= q.id %>/attachments/<%= a.id %>/delete" onsubmit="return appConfirmForm(event, 'Remove this file?')" style="display:none"></form>
+<% }) }) }) %>
+
+<%- include('partials/footer') %>

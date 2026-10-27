@@ -1,0 +1,110 @@
+<%- include('partials/header', { title: 'Controls - Kanban', user, ws, active: 'controls' }) %>
+
+<style>
+  @media (max-width:760px) {
+    #kanban-board { grid-template-columns:none !important;grid-auto-flow:column;grid-auto-columns:min(84vw,320px);scroll-snap-type:x proximity;padding-bottom:8px;overscroll-behavior-inline:contain; }
+    #kanban-board .kanban-col { min-width:0 !important;scroll-snap-align:start; }
+    .controls-kanban-actions { display:grid;grid-template-columns:minmax(0,1fr);width:100%; }
+    .controls-kanban-actions > .btn,
+    .controls-kanban-import,
+    .controls-kanban-import > summary { width:100%;justify-content:center; }
+    .controls-kanban-import-panel {
+      box-sizing:border-box;
+      top:calc(100% + 4px) !important;
+      right:auto !important;
+      left:0 !important;
+      width:100% !important;
+      min-width:0 !important;
+      max-width:100% !important;
+      max-height:calc(100vh - 140px);
+      max-height:calc(100dvh - 140px - env(safe-area-inset-bottom));
+      overflow-y:auto;
+      overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;
+    }
+  }
+</style>
+
+<a href="/workspaces/<%= ws.id %>/controls" class="link-muted text-base">← Table view</a>
+
+<div class="page-head" style="margin-top:8px">
+  <div><h1 class="page-title">Controls - Kanban</h1>
+    <div class="page-subtitle">Drag-friendly view across status columns. Click any card to open the control.</div></div>
+  <div class="row controls-kanban-actions">
+    <a href="/workspaces/<%= ws.id %>/controls/export.csv" class="btn btn-secondary btn-xs">Export CSV</a>
+    <details class="controls-kanban-import" style="position:relative;">
+      <summary class="btn btn-secondary btn-xs">Import CSV</summary>
+      <form method="POST" action="/workspaces/<%= ws.id %>/controls/import" class="popover-panel controls-kanban-import-panel" style="position:absolute;right:0;top:30px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;--popover-w:380px;z-index:5;box-shadow:var(--shadow-lg);">
+        <div class="meta" style="margin-bottom:6px;">CSV with headers: id,status,applicability,maturity,notes</div>
+        <textarea class="textarea mono" name="csv" rows="6" required></textarea>
+        <button class="btn btn-primary btn-xs" style="margin-top:8px;">Import</button>
+      </form>
+    </details>
+  </div>
+</div>
+
+<%
+  const cols = [
+    { key: 'Not Assessed', label: 'Not assessed', color: '#a1a1aa' },
+    { key: 'Not Implemented', label: 'Not implemented', color: '#dc2626' },
+    { key: 'Work In Progress', label: 'Work in progress', color: '#2563eb' },
+    { key: 'Partially Implemented', label: 'Partially implemented', color: '#ca8a04' },
+    { key: 'Implemented', label: 'Implemented', color: '#16a34a' },
+    { key: 'Not Applicable', label: 'Not applicable', color: '#71717a' }
+  ];
+  const grouped = {};
+  cols.forEach(c => grouped[c.key] = []);
+  rows.forEach(r => { (grouped[r.status] || grouped['Not Assessed']).push(r); });
+%>
+
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;overflow-x:auto;" id="kanban-board">
+  <% cols.forEach(c => { %>
+    <div class="panel kanban-col" data-status="<%= c.key %>" style="padding:10px;min-width:180px;">
+      <div class="text-xs text-secondary" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em;font-weight: 500;">
+        <span style="width:7px;height:7px;border-radius:50%;background:<%= c.color %>;"></span><%= c.label %>
+        <span class="meta col-count" style="margin-left:auto;font-weight:500;text-transform:none;letter-spacing:0;"><%= grouped[c.key].length %></span>
+      </div>
+      <div class="kanban-drop" style="min-height:30px;">
+      <% grouped[c.key].forEach(r => { %>
+        <a href="/workspaces/<%= ws.id %>/controls/<%= r.id %>" draggable="true" data-iso="<%= r.id %>" class="kanban-card text-base" style="display:block;padding:8px 10px;margin-bottom:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;cursor:grab;">
+          <div style="font-weight:500;line-height:1.3;"><%= r.title %></div>
+          <div class="meta mono text-eyebrow" style="margin-top:2px;"><%= r.id.replace('annex-','').toUpperCase() %><% if (r.maturity) { %> · M<%= r.maturity %><% } %><% if (r.owner) { %> · <%= r.owner %><% } %></div>
+        </a>
+      <% }) %>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<script>
+let dragged = null;
+document.querySelectorAll('.kanban-card').forEach(c => {
+  c.addEventListener('dragstart', e => { dragged = c; e.dataTransfer.effectAllowed = 'move'; c.style.opacity = '0.5'; });
+  c.addEventListener('dragend', e => { c.style.opacity = '1'; });
+  c.addEventListener('click', e => { if (dragged === c) e.preventDefault(); });
+});
+document.querySelectorAll('.kanban-drop').forEach(zone => {
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.parentElement.style.background = 'var(--accent-soft)'; });
+  zone.addEventListener('dragleave', e => { zone.parentElement.style.background = ''; });
+  zone.addEventListener('drop', async e => {
+    e.preventDefault();
+    zone.parentElement.style.background = '';
+    if (!dragged) return;
+    const newStatus = zone.parentElement.dataset.status;
+    const isoId = dragged.dataset.iso;
+    zone.appendChild(dragged);
+    document.querySelectorAll('.kanban-col').forEach(col => {
+      col.querySelector('.col-count').textContent = col.querySelectorAll('.kanban-card').length;
+    });
+    try {
+      await fetch(`/workspaces/<%= ws.id %>/controls/${isoId}/autosave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+    } catch (err) { console.warn('autosave failed', err); }
+  });
+});
+</script>
+
+<%- include('partials/footer') %>

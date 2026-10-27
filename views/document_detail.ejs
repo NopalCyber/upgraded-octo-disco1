@@ -1,0 +1,568 @@
+<%- include('partials/header', { title: doc.name, user, ws, active: 'documents' }) %>
+
+<a href="/workspaces/<%= ws.id %>/documents" class="link-muted text-base">← All documents</a>
+
+<%
+  const can = p => userPerms && userPerms.has && userPerms.has(p);
+  const pendingApprover = currentVersion && approvers.find(a => a.kind === 'internal' && a.user_id === user.id && !a.decision);
+  const activePending = currentVersion ? approvers.filter(a => {
+    if (a.kind === 'internal') return !a.decision;
+    return !a.decision && !a.revoked_at && (!a.expires_at || new Date(a.expires_at) >= new Date());
+  }) : [];
+  const nextSeq = activePending.map(a => a.sequence).sort((x, y) => x - y)[0];
+  const isMyTurn = pendingApprover && pendingApprover.sequence === nextSeq;
+%>
+
+<div class="panel" style="margin-top:12px;margin-bottom:16px;">
+  <div class="panel-head">
+    <h2>Linked controls / clauses</h2>
+    <span class="meta">What this document operationalizes - drives the SoA "covered by" view</span>
+  </div>
+  <div class="panel-pad">
+    <% if (!linkedControls || linkedControls.length === 0) { %>
+      <div class="meta" style="margin-bottom:12px;">No links yet. Tag the Annex A controls or main-body clauses this document covers - auditors use this to trace coverage.</div>
+    <% } else { %>
+      <table class="t" style="margin-bottom:12px;">
+        <thead><tr><th style="width:140px;">Reference</th><th>Title</th><th style="width:140px;">Type</th><th style="width:160px;">Section ref</th><th style="width:60px;"></th></tr></thead>
+        <tbody>
+          <% linkedControls.forEach(lc => { %>
+            <tr>
+              <td><code class="text-sm"><%= lc.code || lc.iso_item_id.replace('annex-','').replace('clause-','').toUpperCase() %></code><% if (lc.frameworkLabel && new Set((linkedControls || []).map(x => x.framework)).size > 1) { %> <span class="meta text-xs"><%= lc.frameworkLabel %></span><% } %></td>
+              <td><%= (lc.title || '').replace(/^A\.[0-9.]+ /, '').replace(/^[0-9.]+ /, '') %></td>
+              <td class="meta" style="text-transform:capitalize;"><%= lc.type %><% if (lc.category) { %> · <%= lc.category %><% } %></td>
+              <td class="meta"><%= lc.section_ref || '-' %></td>
+              <td style="text-align:right;">
+                <% if (can('document.edit')) { %>
+                  <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/controls/<%= lc.link_id %>/delete" style="display:inline;" onsubmit="return appConfirmForm(event, 'Remove this control link?')">
+                    <button class="btn btn-danger btn-xs">×</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+    <% if (can('document.edit') && !doc.locked) {
+         const grp = {}; const grpLabel = {};
+         allControls.forEach(c => { const k = c.groupKey || c.type; (grp[k] = grp[k] || []).push(c); grpLabel[k] = c.groupLabel || (c.type === 'clause' ? 'Main body clauses (4–10)' : 'Annex A controls'); });
+         const linkedIds = new Set((linkedControls || []).map(lc => lc.iso_item_id));
+         const cleanTitle = (t) => (t || '').replace(/^A\.[0-9.]+ /, '').replace(/^[0-9.]+ /, '');
+    %>
+      <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/controls" style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;">
+        <div>
+          <label class="label">Link a single control / clause</label>
+          <div class="combo" data-combo style="position:relative;">
+            <input type="hidden" name="iso_item_id" data-combo-value required>
+            <input type="text" data-combo-input class="input text-md" placeholder="Click or type to search - e.g. access control, A.5.15, monitoring…" autocomplete="off">
+            <div data-combo-panel style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:30;background:var(--bg);border:1px solid var(--border);border-radius:4px;box-shadow:var(--shadow-lg);max-height:280px;overflow-y:auto;">
+              <% Object.keys(grp).forEach(t => {
+                   const available = grp[t].filter(c => !linkedIds.has(c.id));
+                   if (!available.length) return;
+              %>
+                <div data-combo-grouplabel style="padding:6px 10px;font-size:10px;font-weight: 500;text-transform:uppercase;letter-spacing:0.05em;color:<%= t.endsWith('clause') ? '#0891b2' : '#475569' %>;background:var(--bg-subtle);border-bottom:1px solid var(--border);">
+                  <%= grpLabel[t] %>
+                </div>
+                <% available.forEach(c => {
+                     const code = c.code || c.id.replace('annex-','').replace('clause-','').toUpperCase();
+                     const ctitle = cleanTitle(c.title);
+                     const label = code + ' - ' + ctitle;
+                %>
+                  <div class="text-md" data-combo-option data-value="<%= c.id %>" data-label="<%= label %>" data-search="<%= (code + ' ' + ctitle).toLowerCase() %>" style="padding:6px 10px;cursor:pointer;display:flex;gap:8px;align-items:baseline;">
+                    <span class="mono meta text-xs" style="width:80px;flex-shrink:0;"><%= code %></span>
+                    <span><%= ctitle %></span>
+                  </div>
+                <% }) %>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+        <div><label class="label">Section ref <span class="meta">(optional)</span></label><input class="input" name="section_ref" placeholder="e.g. §4.2"></div>
+        <div><button class="btn btn-primary btn-xs">Link</button></div>
+      </form>
+      <script>
+        (function initCombos() {
+          document.querySelectorAll('[data-combo]').forEach(root => {
+            if (root.dataset.comboInit === '1') return;
+            root.dataset.comboInit = '1';
+            const input = root.querySelector('[data-combo-input]');
+            const valueEl = root.querySelector('[data-combo-value]');
+            const panel = root.querySelector('[data-combo-panel]');
+            const options = panel.querySelectorAll('[data-combo-option]');
+            const groupLabels = panel.querySelectorAll('[data-combo-grouplabel]');
+            let activeIdx = -1;
+
+            const open = () => { panel.style.display = 'block'; };
+            const close = () => { panel.style.display = 'none'; };
+            const filter = (q) => {
+              const s = (q || '').toLowerCase().trim();
+              let firstVisible = -1;
+              options.forEach((o, i) => {
+                const match = !s || (o.dataset.search || '').includes(s);
+                o.style.display = match ? '' : 'none';
+                if (match && firstVisible === -1) firstVisible = i;
+              });
+              groupLabels.forEach(gl => {
+                let visible = 0;
+                let n = gl.nextElementSibling;
+                while (n && !n.hasAttribute('data-combo-grouplabel')) {
+                  if (n.hasAttribute('data-combo-option') && n.style.display !== 'none') visible++;
+                  n = n.nextElementSibling;
+                }
+                gl.style.display = visible ? '' : 'none';
+              });
+              activeIdx = firstVisible;
+              highlight();
+            };
+            const highlight = () => {
+              options.forEach((o, i) => {
+                o.style.background = (i === activeIdx) ? 'var(--bg-subtle)' : '';
+              });
+              if (activeIdx >= 0) options[activeIdx].scrollIntoView({ block: 'nearest' });
+            };
+            const choose = (opt) => {
+              if (!opt) return;
+              valueEl.value = opt.dataset.value;
+              input.value = opt.dataset.label;
+              close();
+            };
+
+            input.addEventListener('focus', () => { filter(input.value); open(); });
+            input.addEventListener('input', () => { valueEl.value = ''; filter(input.value); open(); });
+            input.addEventListener('keydown', (e) => {
+              const visible = Array.from(options).filter(o => o.style.display !== 'none');
+              if (e.key === 'ArrowDown') { e.preventDefault(); open();
+                const cur = visible.indexOf(options[activeIdx]);
+                activeIdx = options.indexOf(visible[Math.min(cur + 1, visible.length - 1)]);
+                highlight();
+              } else if (e.key === 'ArrowUp') { e.preventDefault();
+                const cur = visible.indexOf(options[activeIdx]);
+                activeIdx = options.indexOf(visible[Math.max(cur - 1, 0)]);
+                highlight();
+              } else if (e.key === 'Enter') {
+                if (panel.style.display === 'block' && activeIdx >= 0) {
+                  e.preventDefault(); choose(options[activeIdx]);
+                }
+              } else if (e.key === 'Escape') { close(); }
+            });
+            options.forEach(o => o.addEventListener('mousedown', (e) => { e.preventDefault(); choose(o); }));
+            document.addEventListener('click', (e) => { if (!root.contains(e.target)) close(); });
+          });
+        })();
+      </script>
+
+      <details style="margin-top:12px;">
+        <summary class="link-muted text-md" style="cursor:pointer;">+ Link many at once <span class="meta" style="font-weight:400;">- useful for umbrella policies that cover several controls</span></summary>
+        <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/controls" style="margin-top:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-subtle);">
+          <div class="text-base" style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center;">
+            <button type="button" onclick="document.querySelectorAll('.bulk-pick').forEach(c => c.checked = true); updateBulkCount()" class="btn btn-secondary btn-xs">Select all</button>
+            <button type="button" onclick="document.querySelectorAll('.bulk-pick').forEach(c => c.checked = false); updateBulkCount()" class="btn btn-secondary btn-xs">Clear</button>
+            <input type="text" id="bulkFilter" placeholder="filter…" oninput="filterBulk(this.value)" class="input text-base" style="width:160px;">
+            <span class="meta text-base" style="margin-left:auto;"><span id="bulkCount">0</span> selected</span>
+          </div>
+          <div style="max-height:340px;overflow-y:auto;padding:8px 12px;">
+            <% Object.keys(grp).forEach(t => {
+                 const available = grp[t].filter(c => !linkedIds.has(c.id));
+                 if (!available.length) return; %>
+              <div class="meta" style="font-weight: 500;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin:6px 0 4px 0;color:<%= t.endsWith('clause') ? '#0891b2' : '#475569' %>;">
+                <%= grpLabel[t] %>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 14px;">
+                <% available.forEach(c => {
+                     const code = c.code || c.id.replace('annex-','').replace('clause-','').toUpperCase();
+                     const ctitle = cleanTitle(c.title);
+                %>
+                  <label class="bulk-row text-md" data-search="<%= (code + ' ' + ctitle).toLowerCase() %>" style="display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer;">
+                    <input type="checkbox" class="bulk-pick" name="iso_item_id" value="<%= c.id %>" onchange="updateBulkCount()">
+                    <span class="mono meta text-xs" style="width:80px;flex-shrink:0;"><%= code %></span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><%= ctitle %></span>
+                  </label>
+                <% }) %>
+              </div>
+            <% }) %>
+          </div>
+          <div style="padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;background:var(--bg);">
+            <input class="input text-base" name="section_ref" placeholder="Optional section ref applied to every link in this batch" style="flex:1;">
+            <button class="btn btn-primary btn-xs">Link selected</button>
+          </div>
+        </form>
+        <script>
+          function updateBulkCount(){
+            document.getElementById('bulkCount').textContent = document.querySelectorAll('.bulk-pick:checked').length;
+          }
+          function filterBulk(q){
+            const s = (q || '').toLowerCase();
+            document.querySelectorAll('.bulk-row').forEach(row => {
+              row.style.display = !s || row.dataset.search.includes(s) ? '' : 'none';
+            });
+          }
+        </script>
+      </details>
+    <% } %>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:12px;margin-bottom:16px">
+  <div class="panel-pad" style="border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+      <div style="flex:1;min-width:0;">
+        <form class="row" method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>">
+          <input class="input" name="name" value="<%= doc.name %>" style="font-size:18px;font-weight: 500;" <%= doc.locked ? 'disabled' : '' %>>
+          <% if (!doc.locked && can('document.edit')) { %><button class="btn btn-secondary btn-xs">Rename</button><% } %>
+        </form>
+        <div class="meta" style="margin-top:4px;">
+          v<%= doc.version %> · <%= doc.category %> · status:
+          <span class="tag <%= doc.status === 'approved' || doc.status === 'published' ? 'tag-success' : doc.status === 'in_review' ? 'tag-warn' : doc.status === 'retired' ? 'tag-neutral' : doc.status === 'rejected' ? 'tag-danger' : 'tag-neutral' %>"><%= doc.status %></span>
+          <% if (doc.locked) { %> · <span class="tag tag-info">locked</span><% } %>
+          · updated <%= doc.updated_at %>
+        </div>
+        <form class="row-center" method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/retention" style="gap:6px;margin-top:6px;">
+          <label class="meta text-sm" for="docRetention">Kept for</label>
+          <input id="docRetention" class="input text-base" name="retention_period" list="retentionPeriods" value="<%= doc.retention_period || '' %>" placeholder="not set" style="max-width:240px;padding:3px 8px;" <%= can('document.edit') ? '' : 'disabled' %>>
+          <datalist id="retentionPeriods"><option value="3 years after it is superseded"><option value="For the life of the certification plus 3 years"><option value="7 years after it is superseded"><option value="Until the AI system is retired plus 3 years"></datalist>
+          <% if (can('document.edit')) { %><button class="btn btn-ghost btn-xs">Save</button><% } %>
+        </form>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <a href="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/versions" class="btn btn-secondary btn-xs">Versions (<%= versions.length %>)</a>
+        <a href="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/acknowledgements" class="btn btn-secondary btn-xs" title="Ask the people this document applies to to confirm they have read it">Acknowledgements</a>
+        <a href="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/docx" class="btn btn-accent btn-xs">.docx</a>
+        <% if (doc.source_filename) { %>
+          <a href="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/source" class="btn btn-secondary btn-xs" title="Download originally uploaded file (<%= doc.source_filename %>)">Original file</a>
+        <% } %>
+        <a href="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/print" target="_blank" class="btn btn-secondary btn-xs">Print</a>
+        <% if (can('document.create') && user.user_type === 'firm') { %>
+          <details style="position:relative;">
+            <summary class="btn btn-secondary btn-xs" style="list-style:none;cursor:pointer;">Save as firm template</summary>
+            <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/save-as-firm-template" class="popover-panel" style="position:absolute;right:0;top:30px;z-index:20;--popover-w:340px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);">
+              <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+              <label class="label" for="ftName">Template name</label>
+              <input class="input" id="ftName" name="name" value="<%= doc.name %>" maxlength="160" required>
+              <label class="label" for="ftDesc" style="margin-top:8px;">What it is for</label>
+              <input class="input" id="ftDesc" name="description" maxlength="500" placeholder="Shown in the template library">
+              <p class="meta text-sm" style="margin:8px 0 0;line-height:1.5;">Every client of the firm will see it. <%= ws.client_name %>'s name and the names set for its templates are replaced with placeholders; remove anything else specific to <%= ws.client_name %> first.</p>
+              <button class="btn btn-primary btn-xs" style="margin-top:8px;">Save to the firm library</button>
+            </form>
+          </details>
+        <% } %>
+        <% if (can('document.delete')) { %>
+          <details style="position:relative;">
+            <summary class="btn btn-danger btn-xs" style="list-style:none;cursor:pointer;">Withdraw</summary>
+            <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/delete" onsubmit="return appConfirmForm(event, 'Withdraw this document? It will leave active views, but all versions, approvals, signatures, and audit evidence will be retained.');" class="popover-panel" style="position:absolute;right:0;top:30px;z-index:20;--popover-w:320px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);">
+              <label class="label" for="withdrawReason">Reason for withdrawal</label>
+              <textarea class="textarea" id="withdrawReason" name="reason" rows="3" maxlength="2000" required placeholder="Why should this controlled document leave active use?"></textarea>
+              <button class="btn btn-danger btn-xs" style="margin-top:8px;">Confirm withdrawal</button>
+            </form>
+          </details>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <% if (signatureIssues && signatureIssues.length) { %>
+    <div class="panel-pad" style="background:rgba(220,38,38,0.06);border-bottom:1px solid var(--border);">
+      <div class="callout-title text-danger">Signature integrity warning</div>
+      <ul class="text-lg text-danger" style="margin:6px 0 0 18px;">
+        <% signatureIssues.forEach(i => { %><li><%= i %></li><% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <div class="panel-pad" style="border-bottom:1px solid var(--border);background:var(--bg-subtle);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span class="meta" style="font-weight:500;">Lifecycle:</span>
+    <% if (doc.status === 'draft' || doc.status === 'rejected') { %>
+      <% if (can('document.submit_review')) { %>
+        <button class="btn btn-primary btn-xs" onclick="document.getElementById('reviewPanel').classList.toggle('hidden')">Submit for review</button>
+      <% } %>
+    <% } else if (doc.status === 'in_review') { %>
+      <span class="meta">Awaiting approval - <%= approvers.filter(a => !a.decision).length %> remaining</span>
+      <% if (isMyTurn && can('document.review')) { %>
+        <button class="btn btn-accent btn-xs" onclick="document.getElementById('decidePanel').classList.toggle('hidden')">Decide (your turn)</button>
+      <% } %>
+    <% } else if (doc.status === 'approved') { %>
+      <% if (can('document.publish')) { %>
+        <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/publish" style="display:inline">
+          <button class="btn btn-primary btn-xs">Publish</button>
+        </form>
+      <% } %>
+    <% } else if (doc.status === 'published') { %>
+      <% if (can('document.retire')) { %>
+        <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/retire" onsubmit="return appConfirmForm(event, 'Retire this published document?')" style="display:inline">
+          <button class="btn btn-danger btn-xs">Retire</button>
+        </form>
+      <% } %>
+    <% } %>
+    <% if (doc.locked && can('document.edit')) { %>
+      <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/new-version" style="display:inline">
+        <button class="btn btn-secondary btn-xs">Open new version</button>
+      </form>
+    <% } %>
+    <% if (currentVersion && can('document.sign')) { %>
+      <button class="btn btn-secondary btn-xs" onclick="document.getElementById('signPanel').classList.toggle('hidden')">E-sign current version</button>
+    <% } %>
+    <span style="flex:1"></span>
+    <% if (signatures && signatures.length) { %>
+      <span class="meta text-success">✓ <%= signatures.length %> signature<%= signatures.length === 1 ? '' : 's' %> on v<%= currentVersion ? currentVersion.version : doc.version %></span>
+    <% } %>
+  </div>
+
+  <% if ((doc.status === 'draft' || doc.status === 'rejected') && can('document.submit_review')) { %>
+    <div id="reviewPanel" class="panel-pad" style="background:var(--accent-soft);border-bottom:1px solid var(--border);">
+      <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/submit-review" id="submitReviewForm">
+        <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+        <div class="sec-label">Submit for review</div>
+        <div style="margin-bottom:10px;">
+          <label class="label">Approver chain (in order)</label>
+          <div class="meta text-xs" style="margin-bottom:8px;">Pick an existing client user, or invite an external approver by email - they'll get a one-time magic link, no account needed.</div>
+          <div id="approverList" style="display:grid;gap:8px;"></div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="addApprover('internal')">+ Internal user</button>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="addApprover('external')">+ External (magic link)</button>
+          </div>
+        </div>
+        <div style="margin-bottom:10px;"><label class="label">Change summary</label><textarea class="textarea" name="change_summary" rows="2" placeholder="What changed? Why submit now?"></textarea></div>
+        <input type="hidden" name="approvers_json" id="approversJsonField">
+        <button class="btn btn-primary btn-xs" onclick="return serializeApprovers()">Submit for review</button>
+      </form>
+    </div>
+  <% } %>
+
+  <% if (isMyTurn && can('document.review')) { %>
+    <div id="decidePanel" class="hidden panel-pad" style="background:rgba(202,138,4,0.06);border-bottom:1px solid var(--border);">
+      <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/decide">
+        <div class="sec-label">Your decision (approver #<%= pendingApprover.sequence %><% if (pendingApprover.role_label) { %> · <%= pendingApprover.role_label %><% } %>)</div>
+        <div style="margin-bottom:10px;"><label class="label">Reason / comment (required for reject)</label><textarea class="textarea" name="reason" rows="2" maxlength="4000" required></textarea></div>
+        <div class="row">
+          <button name="decision" value="approve" class="btn btn-primary btn-xs" formnovalidate>Approve</button>
+          <button name="decision" value="reject" class="btn btn-danger btn-xs" onclick="return appConfirmClick(event, 'Reject and send back to draft?')">Reject</button>
+        </div>
+      </form>
+    </div>
+  <% } %>
+
+  <% if (currentVersion && can('document.sign')) { %>
+    <div id="signPanel" class="hidden panel-pad" style="background:var(--bg-subtle);border-bottom:1px solid var(--border);">
+      <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/sign">
+        <div class="sec-label">Apply electronic signature on v<%= currentVersion.version %></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div><label class="label">Intent</label>
+            <select class="select" name="intent" required>
+              <option value="approve">Approve</option>
+              <option value="acknowledge">Acknowledge / read</option>
+              <option value="witness">Witness</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div><label class="label">Your role (e.g. CISO, ISMS Manager)</label><input class="input" name="signature_role" placeholder="ISMS Manager"></div>
+        </div>
+        <label class="meta" style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;margin-bottom:10px;">
+          <input type="checkbox" name="attestation" value="1" required>
+          <span>I attest that I am <strong><%= user.name %></strong> and intend my electronic signature to be the legally binding equivalent of my handwritten signature on the document content as it stands at SHA-256: <code class="text-eyebrow"><%= currentVersion.content_hash.slice(0,16) %>…</code></span>
+        </label>
+        <button class="btn btn-primary btn-xs">Sign now</button>
+      </form>
+    </div>
+  <% } %>
+
+  <% if (currentVersion && approvers && approvers.length) { %>
+    <div class="panel-pad" style="border-bottom:1px solid var(--border);">
+      <div class="sec-label">Approval chain · v<%= currentVersion.version %></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <% approvers.forEach((a, i) => {
+             const isExternalRevoked = a.kind === 'external' && a.revoked_at;
+             const isExternalExpired = a.kind === 'external' && !a.decision && !a.revoked_at && a.expires_at && (new Date(a.expires_at) < new Date());
+             const bg = a.decision === 'approved' ? 'rgba(22,163,74,0.06)' :
+                        a.decision === 'rejected' ? 'rgba(220,38,38,0.06)' :
+                        isExternalRevoked ? 'rgba(113,113,122,0.06)' :
+                        isExternalExpired ? 'rgba(161,98,7,0.06)' : 'transparent';
+             let statusLabel = a.decision || 'pending';
+             if (isExternalRevoked) statusLabel = 'revoked';
+             else if (isExternalExpired) statusLabel = 'expired';
+        %>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:<%= bg %>;">
+            <span class="num text-xs" style="width:18px;height:18px;border-radius:9px;background:var(--accent);color:white;display:inline-flex;align-items:center;justify-content:center;font-weight: 500;"><%= a.sequence %></span>
+            <div>
+              <div class="text-md" style="font-weight:500;">
+                <%= a.person_name %><% if (a.role_label) { %> · <span class="meta"><%= a.role_label %></span><% } %>
+              </div>
+              <div class="meta">
+                <%= a.kind === 'external' ? 'external · ' : '' %><%= statusLabel %><% if (a.decided_at) { %> · <%= a.decided_at %><% } %>
+              </div>
+              <% if (a.kind === 'external' && !a.decision && !a.revoked_at) { %>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                  <% if (can('document.submit_review')) { %>
+                    <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/external-approvers/<%= a.id %>/resend" style="display:inline;">
+                      <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+                      <button class="btn btn-secondary btn-xs" title="Generate a fresh token and re-email the link to <%= a.person_email %>">Resend link</button>
+                    </form>
+                    <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>/external-approvers/<%= a.id %>/revoke" style="display:inline;" onsubmit="return confirm('Revoke this approver? The magic link will stop working immediately.');">
+                      <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+                      <button class="btn btn-danger btn-xs">Revoke</button>
+                    </form>
+                  <% } %>
+                </div>
+              <% } %>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  <% } %>
+
+  <div style="padding:16px 20px;">
+    <div class="meta" style="margin-bottom:6px;">Document body <% if (doc.locked) { %>· <span class="text-danger">locked</span><% } %><span id="autosaveBadge" class="meta text-success" style="margin-left:8px;display:none;">saved</span></div>
+    <form method="POST" action="/workspaces/<%= ws.id %>/documents/<%= doc.id %>" id="docForm">
+      <textarea name="content" id="docContent" <%= doc.locked ? 'readonly' : '' %>><%= doc.content %></textarea>
+      <% if (!doc.locked && can('document.edit')) { %>
+        <button class="btn btn-primary btn-xs" style="margin-top:8px;">Save</button>
+      <% } %>
+    </form>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Comments</h2></div>
+  <% comments.forEach(c => { %>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border);<%= c.internal_only ? 'background:#fefce8;' : '' %>">
+      <div class="meta"><%= c.author %> · <%= c.created_at %><% if (c.internal_only) { %> · <span class="text-warn" style="font-weight:500;">internal</span><% } %></div>
+      <div class="text-lg" style="margin-top:2px;"><%= c.body %></div>
+    </div>
+  <% }) %>
+  <% if (can('comment.create')) { %>
+    <form method="POST" action="/workspaces/<%= ws.id %>/comments" class="panel-pad">
+      <input type="hidden" name="parent_type" value="document">
+      <input type="hidden" name="parent_id" value="<%= doc.id %>">
+      <textarea name="body" rows="2" class="textarea" placeholder="Add a comment…" required></textarea>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+        <% if (isFirm) { %>
+          <label class="meta" style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" name="internal_only" value="1"> Internal only</label>
+        <% } else { %><span></span><% } %>
+        <button class="btn btn-primary btn-xs">Post</button>
+      </div>
+    </form>
+  <% } %>
+</div>
+
+<script>
+const wsUsers = <%- jsonForScript(wsUsers || []) %>;
+
+function renderApprovers() {
+  const wrap = document.getElementById('approverList');
+  if (!wrap) return;
+  if (!wrap.children.length) addApprover('internal');
+}
+
+function addApprover(kind) {
+  const wrap = document.getElementById('approverList');
+  const idx = wrap.children.length + 1;
+  const div = document.createElement('div');
+  div.dataset.kind = kind;
+  div.style.cssText = 'display:grid;grid-template-columns:30px 1fr auto;gap:6px;align-items:start;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);';
+  const seqBadge = `<span class="num text-xs" style="width:22px;height:22px;border-radius:11px;background:var(--accent);color:white;display:inline-flex;align-items:center;justify-content:center;font-weight: 500;margin-top:4px;">${idx}</span>`;
+  const kindBadge = kind === 'external'
+    ? `<div class="text-eyebrow" style="color:var(--accent);font-weight: 500;margin-bottom:4px;">External · magic link</div>`
+    : `<div class="text-eyebrow" style="color:var(--text-tertiary);margin-bottom:4px;">Internal user</div>`;
+  const inner = kind === 'internal'
+    ? `${kindBadge}
+       <div style="display:grid;grid-template-columns:2fr 1.5fr;gap:6px;">
+         <select class="select approver-user"><option value="">-- pick user --</option>${wsUsers.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}</select>
+         <input class="input approver-role" placeholder="Role label (e.g. CISO)">
+       </div>`
+    : `${kindBadge}
+       <div style="display:grid;grid-template-columns:1.2fr 1.6fr 1fr;gap:6px;">
+         <input class="input approver-name" placeholder="Name (e.g. Jane Smith)" required>
+         <input class="input approver-email" type="email" placeholder="email@example.com" required>
+         <input class="input approver-role" placeholder="Role (e.g. CISO)">
+       </div>`;
+  div.innerHTML = `
+    ${seqBadge}
+    <div>${inner}</div>
+    <button type="button" class="btn btn-danger btn-xs" onclick="this.parentElement.remove();renumberApprovers()" style="margin-top:4px;">×</button>
+  `;
+  wrap.appendChild(div);
+}
+
+function renumberApprovers() {
+  const wrap = document.getElementById('approverList');
+  Array.from(wrap.children).forEach((row, i) => {
+    row.firstElementChild.textContent = i + 1;
+  });
+}
+
+function serializeApprovers() {
+  const wrap = document.getElementById('approverList');
+  const out = [];
+  let invalid = null;
+  Array.from(wrap.children).forEach((row, i) => {
+    const kind = row.dataset.kind;
+    const role = (row.querySelector('.approver-role')?.value || '').trim();
+    if (kind === 'internal') {
+      const userId = row.querySelector('.approver-user')?.value;
+      if (!userId) { invalid = invalid || `Approver #${i + 1}: pick a user.`; return; }
+      out.push({ kind: 'internal', user_id: parseInt(userId, 10), role });
+    } else {
+      const name = (row.querySelector('.approver-name')?.value || '').trim();
+      const email = (row.querySelector('.approver-email')?.value || '').trim();
+      if (!name || !email) { invalid = invalid || `Approver #${i + 1}: name and email required.`; return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { invalid = invalid || `Approver #${i + 1}: "${email}" doesn't look like an email.`; return; }
+      out.push({ kind: 'external', name, email, role });
+    }
+  });
+  if (invalid) { appAlert(invalid); return false; }
+  if (out.length === 0) { appAlert('Add at least one approver.'); return false; }
+  document.getElementById('approversJsonField').value = JSON.stringify(out);
+  return true;
+}
+
+renderApprovers();
+
+let badgeTimer;
+function flashSaved() {
+  const b = document.getElementById('autosaveBadge');
+  if (!b) return;
+  b.style.display = 'inline';
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => { b.style.display = 'none'; }, 1500);
+}
+
+const docTextarea = document.getElementById('docContent');
+const isLocked = docTextarea && docTextarea.hasAttribute('readonly');
+</script>
+<script src="/vendor/tinymce/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+tinymce.init({
+  selector: '#docContent',
+  license_key: 'gpl',
+  height: 720,
+  menubar: 'file edit view insert format tools table',
+  plugins: 'advlist autolink lists link image charmap searchreplace visualblocks visualchars code fullscreen insertdatetime media table emoticons help wordcount pagebreak nonbreaking anchor',
+  toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image table hr pagebreak | removeformat searchreplace | code fullscreen',
+  toolbar_mode: 'sliding',
+  branding: false,
+  promotion: false,
+  statusbar: true,
+  readonly: isLocked,
+  content_style: 'body { font-family: Calibri, Arial, sans-serif; font-size: 12pt; line-height: 1.5; padding: 24px; max-width: 900px; margin: 0 auto; } table { border-collapse: collapse; } table td, table th { border: 1px solid #ccc; padding: 6px 10px; }',
+  setup: (editor) => {
+    let saveT;
+    editor.on('input change keyup', () => {
+      if (isLocked) return;
+      clearTimeout(saveT);
+      saveT = setTimeout(() => {
+        editor.save();
+        const form = document.getElementById('docForm');
+        const fd = new FormData(form);
+        fetch(form.action, { method: 'POST', body: new URLSearchParams(fd), headers: { 'Accept': 'application/json' } })
+          .then(() => flashSaved())
+          .catch(() => {});
+      }, 1500);
+    });
+  }
+});
+
+document.getElementById('docForm')?.addEventListener('submit', () => {
+  if (window.tinymce && tinymce.activeEditor) tinymce.activeEditor.save();
+});
+</script>
+
+<%- include('partials/footer') %>

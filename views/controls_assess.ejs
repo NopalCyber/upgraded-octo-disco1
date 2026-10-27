@@ -1,0 +1,1208 @@
+<%- include('partials/header', { title: 'Gap assessment', user, ws, active: 'gap-assessment' }) %>
+
+<style>
+  .diag-pill { appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border:1px solid var(--border); border-radius:14px; font:inherit; font-size:11.5px; background:var(--bg); color:var(--text-secondary); font-weight:500; transition:all 0.12s; user-select:none; }
+  .diag-pill:hover { border-color:var(--text-tertiary); }
+  .diag-pill:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .diag-pill-yes[aria-pressed="true"]     { background:#16a34a; color:#fff; border-color:#16a34a; font-weight:500; }
+  .diag-pill-partial[aria-pressed="true"] { background:#a16207; color:#fff; border-color:#a16207; font-weight:500; }
+  .diag-pill-no[aria-pressed="true"]      { background:#b91c1c; color:#fff; border-color:#b91c1c; font-weight:500; }
+  .assessment-copilot { margin-bottom:18px; border:1px solid rgba(79,70,229,0.35); border-radius:8px; background:rgba(79,70,229,0.035); overflow:hidden; }
+  .assessment-copilot-head { padding:12px 14px; border-bottom:1px solid rgba(79,70,229,0.18); display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+  .assessment-copilot-controls { display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .assessment-copilot-result { margin:0 14px 14px; padding:14px; border:1px solid var(--border); border-radius:7px; background:var(--bg); }
+  .assessment-copilot-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+  .assessment-copilot-summary > div { padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-subtle); }
+  .assessment-copilot-findings { display:grid; grid-template-columns:1fr 1fr; gap:12px 18px; margin-top:12px; }
+  .assessment-copilot-findings h4 { margin:0 0 5px; font-size:12px; font-weight:600; }
+  .assessment-copilot-findings ul, #assessmentCopilotSources { margin:0; padding-left:18px; line-height:1.5; }
+  .assessment-copilot-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
+  .assessment-copilot-context { margin:10px 14px; padding:11px 12px; border:1px solid rgba(79,70,229,0.24); border-radius:6px; background:var(--bg); }
+  .assessment-copilot-context-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:9px; }
+  .assessment-copilot-context-item { padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-subtle); }
+  .assessment-copilot-disclosure { margin:10px 14px; padding:11px 12px; border:1px solid rgba(180,83,9,0.45); border-radius:6px; background:rgba(245,158,11,0.09); color:var(--text); }
+</style>
+
+<%
+  const isClause = item.type === 'clause';
+  const isExcluded = state.applicability === 'excluded';
+  const overallTotal = totals.clausesTotal + totals.controlsTotal;
+  const overallAssessed = totals.clausesAssessed + totals.controlsAssessed;
+  const pct = overallTotal ? Math.round((overallAssessed / overallTotal) * 100) : 0;
+  const sectionTotal = isClause ? totals.clausesTotal : totals.controlsTotal;
+  const sectionLabel = isClause ? 'Management system clauses (4–10)' : 'Annex A controls';
+  const refCode = item.id.replace('annex-','').replace('clause-','').toUpperCase();
+  const cleanTitle = item.title.replace(/^A\.[0-9.]+ /,'').replace(/^[0-9.]+ /,'');
+  const sectionTag = isClause
+    ? 'Clause ' + refCode + ' · management system requirement'
+    : refCode + ' · ' + (item.category === 'org' ? 'Organisational' : item.category === 'people' ? 'People' : item.category === 'physical' ? 'Physical' : 'Technological');
+  const evidenceAiConfig = typeof evidenceAi !== 'undefined' && evidenceAi ? evidenceAi : {};
+  const evidenceAiReadyCount = Math.max(0, Number(evidenceAiConfig.ready_count) || 0);
+  const evidenceAiModels = evidenceAiConfig.models || {};
+  const policySearchDocumentRows = typeof policySearchDocs !== 'undefined' && Array.isArray(policySearchDocs) ? policySearchDocs : [];
+  const policyProviderConfig = typeof policyRetrievalProviders !== 'undefined' && policyRetrievalProviders ? policyRetrievalProviders : {};
+  const policySearchDocumentCount = policySearchDocumentRows.length;
+  const localPolicySearchConfigured = !!(policyProviderConfig.local && policyProviderConfig.local.configured);
+%>
+
+<style>
+  .assess-shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 1100px) { .assess-shell { grid-template-columns: 1fr; } .nav-jump { position: static !important; max-height: none !important; } }
+  @media (max-width: 760px) {
+    .assess-shell { gap: 14px; }
+    .assess-shell .nav-jump {
+      max-height: min(240px, 38vh) !important;
+      overflow: auto !important;
+      overscroll-behavior: contain;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+    .assess-shell [style*="grid-template-columns:1fr 1fr"],
+    .assess-shell [style*="grid-template-columns:repeat(3,1fr)"],
+    .assess-shell [style*="grid-template-columns:1fr 220px"],
+    .assess-shell [style*="grid-template-columns:1fr 100px auto"] {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+    .assess-shell [data-diagnostic-group] { justify-content: flex-start !important; }
+    .assess-shell .diag-pill { min-height: 44px; flex: 1 1 72px; justify-content: center; }
+    .assessment-form-actions { align-items: stretch !important; flex-direction: column; }
+    .assessment-form-actions > .row { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .assessment-form-actions .btn { width: 100%; }
+    .assessment-support-grid { grid-template-columns: minmax(0, 1fr) !important; }
+    .assessment-upload-grid, .assessment-link-form { grid-template-columns: minmax(0, 1fr) !important; }
+    .assessment-upload-grid .col-full { grid-column: 1 !important; }
+    .assessment-copilot-head { flex-direction:column; }
+    .assessment-copilot-controls { width:100%; justify-content:flex-start; }
+    .assessment-copilot-controls > div, .assessment-copilot-controls select { width:100% !important; max-width:none !important; }
+    .assessment-copilot-controls .btn, .assessment-copilot-actions .btn { min-height:44px; }
+    .assessment-copilot-summary, .assessment-copilot-findings, .assessment-copilot-context-grid { grid-template-columns:minmax(0,1fr); }
+  }
+  @media (max-width: 430px) {
+    .assess-shell [style*="grid-template-columns:140px 1fr"] { grid-template-columns: minmax(0, 1fr) !important; }
+    .assessment-form-actions > .row { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Gap assessment</h1>
+  </div>
+  <div class="row-center">
+    <a href="/workspaces/<%= ws.id %>/controls/assess?start=clauses" class="btn btn-secondary btn-xs">Jump to clauses</a>
+    <a href="/workspaces/<%= ws.id %>/controls/assess?start=controls" class="btn btn-secondary btn-xs">Jump to Annex A</a>
+    <a href="/workspaces/<%= ws.id %>/controls/assess/summary" class="btn btn-primary btn-xs">View summary →</a>
+  </div>
+</div>
+
+<div class="assess-shell">
+  <%- include('partials/assess_navigator', { navGroups, item, ws }) %>
+  <div>
+
+<% if (doneFlag) { %>
+  <div class="panel" style="margin-bottom:16px;border-color:#16a34a;background:rgba(22,163,74,0.04);">
+    <div class="panel-pad">
+      <div class="text-success" style="font-weight: 500;margin-bottom:4px;">All clauses and controls assessed</div>
+      <div class="meta">Every item has a status other than "Not Assessed". The post-assessment summary turns your answers into a worklist - remediation tasks, missing policies, evidence asks, and risks needing treatment updates.</div>
+      <div style="margin-top:10px;display:flex;gap:6px;">
+        <a href="/workspaces/<%= ws.id %>/controls/assess/summary" class="btn btn-primary">View post-assessment summary →</a>
+        <a href="/workspaces/<%= ws.id %>/soa" class="btn btn-secondary btn-xs">Go to SoA</a>
+        <a href="/workspaces/<%= ws.id %>/readiness/blockers" class="btn btn-secondary btn-xs">Pre-cert blocker check</a>
+      </div>
+    </div>
+  </div>
+<% } %>
+
+<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:14px;margin-bottom:16px;align-items:center;">
+  <div>
+    <div class="text-sm" style="display:flex;justify-content:space-between;margin-bottom:3px;">
+      <span class="meta" style="font-weight:500;">Clauses (4–10)</span>
+      <span class="meta"><strong><%= totals.clausesAssessed %></strong> / <%= totals.clausesTotal %></span>
+    </div>
+    <div style="height:5px;background:var(--bg-subtle);border-radius:3px;overflow:hidden;">
+      <div style="height:100%;width:<%= totals.clausesTotal ? Math.round(totals.clausesAssessed / totals.clausesTotal * 100) : 0 %>%;background:#0891b2;transition:width 0.2s;"></div>
+    </div>
+  </div>
+  <div>
+    <div class="text-sm" style="display:flex;justify-content:space-between;margin-bottom:3px;">
+      <span class="meta" style="font-weight:500;">Annex A controls</span>
+      <span class="meta"><strong><%= totals.controlsAssessed %></strong> / <%= totals.controlsTotal %></span>
+    </div>
+    <div style="height:5px;background:var(--bg-subtle);border-radius:3px;overflow:hidden;">
+      <div style="height:100%;width:<%= totals.controlsTotal ? Math.round(totals.controlsAssessed / totals.controlsTotal * 100) : 0 %>%;background:var(--accent);transition:width 0.2s;"></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:4px;align-items:center;">
+    <span class="meta text-base" style="margin-right:6px;"><strong><%= overallAssessed %></strong> / <%= overallTotal %> · <%= pct %>%</span>
+    <% if (prevId) { %><a href="/workspaces/<%= ws.id %>/controls/assess/<%= prevId %>" class="btn btn-secondary btn-xs" title="Previous">←</a><% } %>
+    <% if (nextId) { %><a href="/workspaces/<%= ws.id %>/controls/assess/<%= nextId %>" class="btn btn-secondary btn-xs" title="Next">→</a><% } %>
+  </div>
+</div>
+
+<div class="panel" style="margin-bottom:16px;">
+  <div class="panel-pad" style="border-bottom:1px solid var(--border);<%= isClause ? 'background:rgba(8,145,178,0.04);' : '' %>">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+      <div class="meta" style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;color:<%= isClause ? '#0891b2' : 'var(--text-secondary)' %>;">
+        <%= sectionTag %>
+      </div>
+      <span class="meta text-sm"><%= isClause ? 'Clause' : 'Control' %> <%= sectionPosition %> of <%= sectionTotal %></span>
+    </div>
+    <h2 style="margin:0;font-size:18px;font-weight: 500;line-height:1.3;"><%= cleanTitle %></h2>
+    <p class="text-xl" style="margin:8px 0 0 0;line-height:1.55;"><%= item.summary %></p>
+    <% if (isClause) { %>
+      <div class="meta text-base" style="margin-top:8px;font-style:italic;">This is a "shall" requirement of ISO 27001:2022 - every certified ISMS must satisfy it. Applicability is not a choice.</div>
+    <% } %>
+  </div>
+
+  <details class="assessment-guidance"><summary class="panel-pad" style="cursor:pointer;font-weight:600">Guidance, acceptance criteria and evidence expectations</summary>
+  <% if (item.purpose || item.what_good_looks_like) { %>
+    <%
+      const hLabel = (s) => `<div class="meta text-eyebrow text-secondary" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">${s}</div>`;
+    %>
+    <div class="panel-pad" style="border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+      <% if (item.purpose) { %>
+        <div>
+          <%- hLabel('What this is actually for') %>
+          <p class="text-lg" style="margin:0;line-height:1.6;"><%= item.purpose %></p>
+        </div>
+      <% } %>
+      <% if (item.what_good_looks_like) { %>
+        <div>
+          <%- hLabel('What good looks like') %>
+          <p class="text-lg" style="margin:0;line-height:1.6;"><%= item.what_good_looks_like %></p>
+        </div>
+      <% } %>
+    </div>
+
+    <% if (item.minimum_certifiable) { %>
+      <div class="panel-pad" style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04);">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:14px;background:rgba(22,163,74,0.10);color:#15803d;font-size:11.5px;font-weight: 500;border:1px solid #15803d;margin-top:2px;">MVP target</div>
+          <div style="flex:1;">
+            <%- hLabel('Minimum to pass Stage 2') %>
+            <p class="text-lg" style="margin:0;line-height:1.6;"><%= item.minimum_certifiable %></p>
+          </div>
+        </div>
+      </div>
+    <% } %>
+
+    <% if (item.common_pitfalls && item.common_pitfalls.length) { %>
+      <div class="panel-pad" style="border-bottom:1px solid var(--border);background:rgba(185,28,28,0.03);">
+        <%- hLabel('Where this usually goes wrong') %>
+        <ul class="text-md" style="margin:0;padding-left:16px;line-height:1.55;">
+          <% item.common_pitfalls.forEach(p => { %><li style="margin-bottom:4px;"><%= p %></li><% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <% if (item.evidence_to_look_for && item.evidence_to_look_for.length) { %>
+      <%
+        const expectedCount = item.evidence_to_look_for.length;
+        const attachedCount = (evidenceList || []).filter(ev => !ev.superseded_at).length;
+        const today = (new Date()).toISOString().slice(0,10);
+        const expSoon = (new Date(Date.now() + 30*86400000)).toISOString().slice(0,10);
+        const expiringCount = (evidenceList || []).filter(ev => ev.valid_until && ev.valid_until >= today && ev.valid_until < expSoon).length;
+        const expiredCount = (evidenceList || []).filter(ev => ev.valid_until && ev.valid_until < today).length;
+        let covBg, covLabel, covColor;
+        if (attachedCount === 0) { covBg = 'rgba(185,28,28,0.08)'; covColor = '#b91c1c'; covLabel = 'No evidence attached'; }
+        else if (expiredCount > 0) { covBg = 'rgba(185,28,28,0.08)'; covColor = '#b91c1c'; covLabel = `${attachedCount} attached · ${expiredCount} expired`; }
+        else if (expiringCount > 0) { covBg = 'rgba(202,138,4,0.10)'; covColor = '#a16207'; covLabel = `${attachedCount} attached · ${expiringCount} expiring soon`; }
+        else { covBg = 'rgba(22,163,74,0.08)'; covColor = '#15803d'; covLabel = `${attachedCount} attached`; }
+      %>
+      <div class="panel-pad" style="border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+          <%- hLabel('Evidence the auditor will ask for') %>
+          <div style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:14px;background:<%= covBg %>;color:<%= covColor %>;font-size:11.5px;font-weight: 500;border:1px solid <%= covColor %>;">
+            <span style="font-family:ui-monospace,monospace;"><%= attachedCount %>/<%= expectedCount %></span>
+            <span><%= covLabel %></span>
+          </div>
+        </div>
+        <table class="text-md" style="width:100%;border-collapse:collapse;">
+          <% item.evidence_to_look_for.forEach((e, i) => { %>
+            <tr style="<%= i < item.evidence_to_look_for.length - 1 ? 'border-bottom:1px dashed var(--border);' : '' %>">
+              <td style="padding:6px 14px 6px 0;width:42%;line-height:1.5;font-weight:500;"><%= e.item %></td>
+              <td class="text-secondary" style="padding:6px 0;line-height:1.5;"><%= e.what_it_tells_you %></td>
+            </tr>
+          <% }) %>
+        </table>
+        <div class="meta text-sm" style="margin-top:6px;line-height:1.4;">
+          <%= attachedCount === 0
+              ? 'No evidence attached yet for this item - scroll to the Evidence files panel below to upload.'
+              : 'Match the list above to your attached files in the Evidence files panel below. The copilot can review metadata and bounded excerpts from ready Evidence Library indexes, but it does not decide whether the evidence is sufficient; that judgement is yours.' %>
+        </div>
+      </div>
+    <% } %>
+
+    <div class="panel-pad" style="border-bottom:1px solid var(--border);display:grid;grid-template-columns:<%= item.maturity_ladder ? '1fr 1fr' : '1fr' %>;gap:24px;">
+      <% if (item.scoping_notes) { %>
+        <div>
+          <%- hLabel('Scoping notes') %>
+          <p class="text-md" style="margin:0;line-height:1.55;"><%= item.scoping_notes %></p>
+        </div>
+      <% } %>
+      <% if (item.maturity_ladder) { %>
+        <div>
+          <%- hLabel('Maturity ladder for this control') %>
+          <div class="text-base" style="display:grid;grid-template-columns:30px 1fr;gap:6px 10px;line-height:1.5;">
+            <% [0,1,2,3,4,5].forEach(lvl => { if (item.maturity_ladder[lvl]) { %>
+              <div class="mono meta" style="font-weight: 500;"><%= lvl %> -</div>
+              <div><%= item.maturity_ladder[lvl] %></div>
+            <% } }) %>
+          </div>
+        </div>
+      <% } %>
+    </div>
+
+    <% if (relatedRows && relatedRows.length) { %>
+      <div class="panel-pad" style="border-bottom:1px solid var(--border);">
+        <%- hLabel('Related items the auditor will check alongside') %>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <% relatedRows.forEach(r => {
+               const code = r.id.replace('annex-','').replace('clause-','').toUpperCase();
+               const title = r.title.replace(/^A\.[0-9.]+ /,'').replace(/^[0-9.]+ /,'');
+          %>
+            <a class="text-base" href="/workspaces/<%= ws.id %>/controls/assess/<%= r.id %>" style="display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border:1px solid var(--border);border-radius:4px;text-decoration:none;background:var(--bg);">
+              <span class="mono meta" style="font-weight: 500;"><%= code %></span>
+              <span><%= title %></span>
+            </a>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+  <% } else { %>
+    <div class="panel-pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;border-bottom:1px solid var(--border);">
+      <div>
+        <div class="meta text-eyebrow text-secondary" style="font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">
+          <%= isClause ? 'Applicability notes' : 'Applicability - points to consider' %>
+          <span class="tag tag-warn" style="font-size:9px;margin-left:6px;">legacy content - not yet rewritten</span>
+        </div>
+        <% if (item.questions.length === 0) { %>
+          <div class="meta text-md">Generally applies to all organizations within the ISMS scope.</div>
+        <% } else { %>
+          <ul class="text-md" style="margin:0;padding-left:16px;line-height:1.5;">
+            <% item.questions.forEach(q => { %><li style="margin-bottom:4px;"><%= q %></li><% }) %>
+          </ul>
+        <% } %>
+      </div>
+      <div>
+        <div class="meta text-eyebrow text-secondary" style="font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">What it requires</div>
+        <ul class="text-md" style="margin:0;padding-left:16px;line-height:1.5;">
+          <% item.evidence_needed.forEach(e => { %><li style="margin-bottom:4px;"><%= e %></li><% }) %>
+        </ul>
+      </div>
+      <div>
+        <div class="meta text-eyebrow text-secondary" style="font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Evidence auditors expect</div>
+        <ul class="text-md" style="margin:0;padding-left:16px;line-height:1.5;">
+          <% item.documentation_needed.forEach(d => { %><li style="margin-bottom:4px;"><%= d %></li><% }) %>
+        </ul>
+      </div>
+    </div>
+  <% } %>
+
+  </details>
+  <% if (recovery) { %>
+    <section class="alert alert-warning" role="alert" tabindex="-1" id="assessmentRecovery">
+      <h2>Your conclusion was not recorded</h2>
+      <p><%= recovery.message %> Your submitted edits remain in the form.</p>
+      <details open><summary>Compare with the current recorded conclusion (version <%= recordedState.record_version || 0 %>)</summary>
+        <p>Status: <strong><%= recordedState.status %></strong> · Capability: <%= recordedState.maturity %> · Applicability: <%= recordedState.applicability %></p>
+        <pre style="white-space:pre-wrap"><%= recordedState.notes || 'No recorded notes.' %></pre>
+      </details>
+    </section>
+  <% } %>
+  <% if (privateDraft.draft) { %>
+    <div class="alert alert-info" role="status">Your private draft is restored. It has not been recorded as an assessment conclusion.
+      <% if (String(privateDraft.draft.baseVersion) !== String(recordedState.record_version || 0)) { %> The recorded version changed since this draft began. Recording will first ask you to compare your edits.<% } %>
+      <% if (recovery) { %><details><summary>Compare the saved private draft</summary><dl><% Object.entries(privateDraft.draft.payload).forEach(([key,value])=>{ %><dt><%= key.replaceAll('_',' ') %></dt><dd style="white-space:pre-wrap"><%= value %></dd><% }) %></dl></details><% } %>
+    </div>
+  <% } %>
+  <% if (diagnosticDraftChanged) { %><div class="alert alert-warning" role="alert">The diagnostic questions changed. Your other draft edits are restored; answer the current questions before recording.</div><% } %>
+  <form method="POST" action="/workspaces/<%= ws.id %>/controls/assess/<%= item.id %>" class="panel-pad" id="assessForm" data-form-draft="assessment" data-draft-record="<%= item.id %>" data-draft-version="<%= recordedState.record_version || 0 %>" data-draft-recovery="<%= recovery ? 'true' : 'false' %>" data-draft-recorded="<%= JSON.stringify({status:recordedState.status,maturity:recordedState.maturity,applicability:recordedState.applicability,notes:recordedState.notes || '',scope_pct:recordedState.scope_pct ?? '',inclusion_justification:recordedState.inclusion_justification || '',exclusion_justification:recordedState.exclusion_justification || '',diagnostic_set_id:diagnosticState.current.setId,...Object.fromEntries(questions.map((q,i)=>['q_'+i,diagnosticState.answers[String(i)] || '']))}) %>">
+    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <noscript><style>#assessForm .diag-pill{display:none!important}</style></noscript>
+    <input type="hidden" name="expected_record_version" value="<%= !recovery && privateDraft.draft ? privateDraft.draft.baseVersion : recordedState.record_version || 0 %>">
+    <input type="hidden" name="mutation_key" value="<%= mutationKey %>">
+    <input type="hidden" name="private_draft_generation" value="<%= privateDraft.generation %>">
+    <input type="hidden" name="private_draft_version" value="<%= privateDraft.draft ? privateDraft.draft.version : 0 %>">
+    <input type="hidden" name="assessment_context" value="<%= activePass ? activePass.id : '' %>">
+    <input type="hidden" name="diagnostic_set_id" value="<%= diagnosticState.current.setId %>">
+    <input type="hidden" name="last_updated_snapshot" value="<%= (state && state.last_updated) || '' %>">
+    <input type="hidden" name="state_fingerprint_snapshot" value="<%= assessmentStateFingerprint %>">
+    <% if (questions && questions.length) { %>
+      <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:8px;background:var(--bg-subtle);">
+        <div class="panel-pad" style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div class="text-lg" style="font-weight: 500;">Current-state diagnostic <span class="meta" style="font-weight:400;">- <%= questions.length %> question<%= questions.length === 1 ? '' : 's' %> for this <%= isClause ? 'clause' : 'control' %></span></div>
+            <div class="meta text-sm" style="line-height:1.45;">Answer based on evidence you can show an auditor - not on what you intend to do. Select the same answer again to clear it. The status hint below is a rough heuristic; <strong>you</strong> set the final status based on your judgement and the evidence available.</div>
+          </div>
+          <div id="suggestedStatusHint" class="meta" style="font-size:11.5px;display:<%= suggestedStatus ? 'flex' : 'none' %>;gap:8px;align-items:center;" title="A heuristic from your answers. Always override with your own judgement.">
+            <span>Heuristic hint: <strong class="text-secondary" id="suggestedStatusText" role="status" aria-live="polite" aria-atomic="true"><%= suggestedStatus || '' %></strong></span>
+            <a href="#" id="applySuggestedLink" onclick="applySuggested(event)" style="font-size:11px;color:var(--text-secondary);text-decoration:underline;<%= suggestedStatus ? '' : 'display:none;' %>" title="Copies the hint into the status dropdown - review before saving">Use as draft</a>
+            <a class="text-xs text-secondary" href="#" id="prefillNotesLink" onclick="prefillNotesFromGaps(event)" style="text-decoration:underline;">Pre-fill notes from gaps</a>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr;">
+          <% questions.forEach((q, i) => { %>
+            <div style="display:grid;grid-template-columns:1fr 220px;gap:12px;padding:9px 14px;<%= i < questions.length - 1 ? 'border-bottom:1px dashed var(--border);' : '' %>align-items:center;">
+              <div class="text-md" style="line-height:1.45;"><%= q %></div>
+              <% const savedValue = ['yes','partial','no'].includes(savedAnswers[String(i)]) ? savedAnswers[String(i)] : ''; %>
+              <div data-diagnostic-group role="group" aria-label="Answer for: <%= q %>" style="display:flex;gap:4px;justify-content:flex-end;">
+                <input type="hidden" data-diagnostic-value name="q_<%= i %>" disabled value="<%= savedValue %>">
+                <noscript><label>Answer<select name="q_<%= i %>"><option value="" <%= !savedValue ? 'selected' : '' %>>Unanswered</option><% ['yes','partial','no'].forEach(opt=>{ %><option value="<%= opt %>" <%= savedValue===opt ? 'selected' : '' %>><%= opt==='yes'?'Yes':opt==='partial'?'Partial':'No' %></option><% }) %></select></label></noscript>
+                <% ['yes','partial','no'].forEach(opt => {
+                     const isOn = savedValue === opt;
+                %>
+                  <button type="button" class="diag-pill diag-pill-<%= opt %>" data-diagnostic-option="<%= opt %>" aria-pressed="<%= isOn ? 'true' : 'false' %>" onclick="toggleDiagnosticAnswer(this)">
+                    <%= opt === 'yes' ? 'Yes' : opt === 'partial' ? 'Partial' : 'No' %>
+                  </button>
+                <% }) %>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+
+    <details class="assessment-copilot-expander"><summary style="cursor:pointer;padding:12px 0;font-weight:600">Assessment Copilot · optional draft assistance</summary>
+    <section id="assessmentCopilotPanel"
+             class="assessment-copilot"
+             data-item-id="<%= item.id %>"
+             data-endpoint="/workspaces/<%= ws.id %>/controls/assess/<%= item.id %>/copilot"
+             aria-labelledby="assessmentCopilotTitle">
+      <div class="assessment-copilot-head">
+        <div style="flex:1;min-width:0;">
+          <div id="assessmentCopilotTitle" class="text-lg" style="font-weight:600;color:#4338ca;display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+            Assessment copilot
+            <span class="tag" style="font-size:9px;background:rgba(79,70,229,0.10);color:#4338ca;">DRAFT ONLY</span>
+          </div>
+          <div class="meta text-sm" style="line-height:1.5;margin-top:4px;">
+            Automatically searches bounded, permission-scoped policy and Evidence Library context when available, then reviews this item's ISO guidance, live diagnostic answers, current form values, scope, and linked governance metadata. Unretrieved file contents, comments, document internal notes, and user identities are excluded. Nothing is saved automatically, and nothing is linked automatically.
+          </div>
+          <% if (['requested','reviewed'].includes(state.review_status || 'none')) { %>
+            <div class="text-xs" style="margin-top:6px;color:#a16207;">This item has a current review state. Saving any substantive change will clear that review so the revised assessment can be reviewed again.</div>
+          <% } %>
+        </div>
+        <div class="assessment-copilot-controls">
+          <% if (aiProvider === 'OpenRouter' && aiModels && aiModels.length) { %>
+            <div>
+              <label class="label text-xxs" for="assessmentAiModelSelect">OpenRouter model</label>
+              <select id="assessmentAiModelSelect" class="select text-base" style="width:auto;max-width:340px;">
+                <% aiModels.forEach(function(option) { %>
+                  <option value="<%= option.id %>" <%= option.id === aiModel ? 'selected' : '' %>><%= option.label %></option>
+                <% }) %>
+              </select>
+            </div>
+          <% } %>
+          <button type="button" id="assessmentCopilotButton" class="btn btn-primary" disabled>Draft assessment</button>
+        </div>
+      </div>
+      <section id="assessmentCopilotContextSummary" class="assessment-copilot-context" aria-labelledby="assessmentCopilotContextTitle">
+        <div id="assessmentCopilotContextTitle" class="text-md" style="font-weight:650;">Automatic context for this draft</div>
+        <div class="assessment-copilot-context-grid">
+          <div class="assessment-copilot-context-item">
+            <div class="meta text-xxs">Assessment</div>
+            <div id="assessmentCopilotAssessmentContext" class="text-sm"><%= questions.length %> diagnostic question<%= questions.length === 1 ? '' : 's' %> plus the current status, capability, and notes.</div>
+          </div>
+          <div class="assessment-copilot-context-item">
+            <div class="meta text-xxs">Policies</div>
+            <div class="text-sm"><%= localPolicySearchConfigured && policySearchDocumentCount
+              ? policySearchDocumentCount + ' active controlled document' + (policySearchDocumentCount === 1 ? '' : 's') + ' available to bounded local search.'
+              : policySearchDocumentCount
+                ? policySearchDocumentCount + ' active controlled document' + (policySearchDocumentCount === 1 ? '' : 's') + ' found, but local policy retrieval is not configured.'
+                : 'No eligible active controlled documents are available. Copilot will continue without policy excerpts.' %></div>
+          </div>
+          <div class="assessment-copilot-context-item">
+            <div class="meta text-xxs">Evidence Library</div>
+            <div class="text-sm"><%= evidenceAiConfig.configured && evidenceAiReadyCount
+              ? evidenceAiReadyCount + ' ready evidence index' + (evidenceAiReadyCount === 1 ? '' : 'es') + ' available to bounded retrieval.'
+              : evidenceAiReadyCount
+                ? evidenceAiReadyCount + ' ready evidence index' + (evidenceAiReadyCount === 1 ? '' : 'es') + ' found, but automatic Evidence Library retrieval is unavailable for this run.'
+                : 'No ready evidence index is available. Copilot will continue without Evidence Library excerpts.' %></div>
+          </div>
+          <div class="assessment-copilot-context-item">
+            <div class="meta text-xxs">Linked governance</div>
+            <div class="text-sm"><%= (linkedDocs || []).length %> document<%= (linkedDocs || []).length === 1 ? '' : 's' %>, <%= (evidenceList || []).length %> evidence record<%= (evidenceList || []).length === 1 ? '' : 's' %>, <%= (linkedRisks || []).length %> risk<%= (linkedRisks || []).length === 1 ? '' : 's' %>, and <%= (openNCs || []).length %> open nonconformit<%= (openNCs || []).length === 1 ? 'y' : 'ies' %>.</div>
+          </div>
+        </div>
+        <div class="meta text-xs" style="margin-top:8px;line-height:1.45;">Copilot chooses bounded relevant passages automatically. Sources actually considered appear below after the run. Review every citation against its source before relying on it.</div>
+        <section id="assessmentCopilotGroundingResult" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);" aria-labelledby="assessmentCopilotGroundingTitle">
+          <div id="assessmentCopilotGroundingTitle" class="text-sm" style="font-weight:650;">Sources Copilot considered</div>
+          <div id="assessmentCopilotGroundingStatus" class="meta text-xs" style="margin-top:3px;"></div>
+          <ul id="assessmentCopilotGroundingSummary" class="text-sm" style="margin:6px 0 0;padding-left:18px;line-height:1.5;"></ul>
+          <div id="assessmentCopilotGroundingLimitations" class="meta text-xs" style="display:none;margin-top:6px;line-height:1.45;"></div>
+        </section>
+      </section>
+      <div id="assessmentCopilotDisclosure"
+           class="assessment-copilot-disclosure"
+           data-disclosure-version="assessment_copilot_automatic_grounding_v2">
+        <div class="text-md" style="font-weight:650;color:#92400e;">External AI processing - fresh acknowledgement required</div>
+        <div class="text-sm" style="line-height:1.5;margin-top:4px;">
+          Each draft automatically searches available policy and indexed Evidence Library content for this item, then sends bounded retrieved passages, ISO guidance, workspace scope, current assessment values, diagnostic answers, and linked record metadata to <%= aiProvider || 'the configured AI provider' %>. Policy retrieval is local-only. Evidence retrieval sends queries and shortlisted evidence chunks to OpenRouter/NVIDIA free embedding and reranking endpoints; this trial path is disabled in production. Those evidence endpoints may log submitted inputs and outputs or use them to improve their models. Nimbus does not detect or redact personal, confidential, sensitive, production, or business-critical data.
+          <% if (aiProvider === 'OpenRouter') { %> The selected OpenRouter Copilot provider may also log its inputs and outputs or use them to improve its models.<% } %>
+        </div>
+        <div class="meta text-xs" style="line-height:1.5;margin-top:6px;">
+          Evidence embedding: <span class="mono"><%= evidenceAiModels.embedding_model || 'not configured' %></span> · Evidence reranking: <span class="mono"><%= evidenceAiModels.reranker_model || 'not configured' %></span><br>
+          Copilot provider: <%= aiProvider || 'not configured' %> · Selected model: <span id="assessmentCopilotSelectedModel"><%= aiModel || 'not configured' %></span>
+        </div>
+        <label class="text-sm" style="display:flex;gap:8px;align-items:flex-start;margin-top:9px;font-weight:550;">
+          <input type="checkbox" id="assessmentCopilotAcknowledgement" style="margin-top:2px;" <%= aiConfigured ? '' : 'disabled' %>>
+          <span>I confirm the assessment context and content available to automatic retrieval are public, synthetic, or sanitized non-confidential trial data, contain no personal, confidential, sensitive, production, or business-critical information, and may be sent to the configured external providers. This acknowledgement applies only to the next draft attempt.</span>
+        </label>
+      </div>
+      <% if (!aiConfigured) { %>
+        <div class="meta text-sm" style="padding:9px 14px;"><%= aiConfigurationMessage %> Manual assessment remains available.</div>
+      <% } %>
+      <div id="assessmentCopilotStatus" class="text-md text-secondary" role="status" aria-live="polite" aria-atomic="true" style="display:none;padding:10px 14px;"></div>
+      <div id="assessmentCopilotError" class="text-md" role="alert" style="display:none;padding:10px 14px;color:var(--danger,#b91c1c);background:rgba(185,28,28,0.05);"></div>
+      <div id="assessmentCopilotResult" class="assessment-copilot-result" style="display:none;">
+        <div class="assessment-copilot-summary">
+          <div><div class="meta text-xxs">Suggested status</div><strong id="assessmentCopilotStatusValue"></strong></div>
+          <div><div class="meta text-xxs">Advisory capability</div><strong id="assessmentCopilotMaturityValue"></strong></div>
+          <div><div class="meta text-xxs">Confidence</div><strong id="assessmentCopilotConfidenceValue"></strong></div>
+        </div>
+        <div>
+          <div class="meta text-xxs" style="margin-bottom:4px;">Rationale</div>
+          <div id="assessmentCopilotRationale" class="text-md" style="line-height:1.55;white-space:pre-wrap;"></div>
+        </div>
+        <div class="assessment-copilot-findings">
+          <section data-copilot-list-section="gaps" style="display:none;"><h4>Gaps</h4><ul id="assessmentCopilotGaps" class="text-md"></ul></section>
+          <section data-copilot-list-section="missing_evidence" style="display:none;"><h4>Missing evidence</h4><ul id="assessmentCopilotMissingEvidence" class="text-md"></ul></section>
+          <section data-copilot-list-section="follow_up_questions" style="display:none;"><h4>Follow-up questions</h4><ul id="assessmentCopilotQuestions" class="text-md"></ul></section>
+          <section data-copilot-list-section="recommended_actions" style="display:none;"><h4>Recommended actions</h4><ul id="assessmentCopilotActions" class="text-md"></ul></section>
+          <section data-copilot-list-section="limitations" style="display:none;"><h4>Limitations</h4><ul id="assessmentCopilotLimitations" class="text-md"></ul></section>
+          <section data-copilot-list-section="sources" style="display:none;"><h4>Sources cited by Copilot</h4><ul id="assessmentCopilotSources" class="text-md"></ul></section>
+        </div>
+        <div id="assessmentCopilotStale" class="text-sm" role="alert" style="display:none;margin-top:12px;padding:8px 10px;border-radius:5px;background:rgba(202,138,4,0.10);color:#92400e;">
+          The assessment form changed after this draft started. Run the copilot again before applying its fields.
+        </div>
+        <div class="assessment-copilot-actions">
+          <button type="button" id="assessmentCopilotApplyScoring" class="btn btn-secondary btn-xs">Use status + capability</button>
+          <button type="button" id="assessmentCopilotAppendNotes" class="btn btn-secondary btn-xs">Append notes draft</button>
+          <span id="assessmentCopilotModel" class="meta text-xs" style="align-self:center;"></span>
+        </div>
+      </div>
+    </section>
+
+    </details>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+      <div>
+        <label class="label" for="assessment-status">Implementation status<% if (isClause) { %> <span class="meta" style="color:#0891b2;">required for cert</span><% } %></label>
+        <select class="select" name="status" id="assessment-status">
+          <% let statusOpts = isClause
+               ? ['Not Assessed','Not Implemented','Work In Progress','Partially Implemented','Implemented']
+               : ['Not Assessed','Implemented','Partially Implemented','Work In Progress','Not Implemented','Not Applicable'];
+             if (state.status && !statusOpts.includes(state.status)) statusOpts = [state.status, ...statusOpts]; %>
+          <% statusOpts.forEach(s => { %>
+            <option value="<%= s %>" <%= state.status === s ? 'selected' : '' %>><%= s %><%= (isClause && s === 'Not Applicable') ? ' - invalid for clauses, please change' : '' %></option>
+          <% }) %>
+        </select>
+        <% if (isClause) { %>
+          <div class="meta text-xs" style="margin-top:4px;line-height:1.4;">Clauses are mandatory "shalls" - every certified ISMS must reach <strong>Implemented</strong>. There is no "Not Applicable" path.</div>
+        <% } %>
+      </div>
+      <div>
+        <label class="label" for="assessment-maturity">Advisory capability (0–5) <span class="meta">Nimbus proprietary method</span></label>
+        <select class="select" name="maturity" id="assessment-maturity">
+          <option value="0" <%= state.maturity == 0 ? 'selected' : '' %>>0 - Not implemented; no documentation; no awareness</option>
+          <option value="1" <%= state.maturity == 1 ? 'selected' : '' %>>1 - Ad hoc; informal practice; no documentation</option>
+          <option value="2" <%= state.maturity == 2 ? 'selected' : '' %>>2 - Documented; not yet consistently performed</option>
+          <option value="3" <%= state.maturity == 3 ? 'selected' : '' %>>3 - Documented and consistently performed; records exist</option>
+          <option value="4" <%= state.maturity == 4 ? 'selected' : '' %>>4 - Performed, measured, and improved on data</option>
+          <option value="5" <%= state.maturity == 5 ? 'selected' : '' %>>5 - Optimized; predictive metrics; continual improvement</option>
+        </select>
+        <div class="meta text-xs" style="margin-top:4px;">Nimbus planning thresholds: level 2 indicates documented design; level 3 indicates consistent operation with records. These are consulting decision aids, not ISO-issued scores.</div>
+      </div>
+    </div>
+
+    <% if (!isClause) {
+         const appKey = state.applicability || 'undecided';
+         const appColor = appKey === 'included' ? '#15803d' : appKey === 'excluded' ? '#71717a' : '#b45309';
+         const appLabel = appKey === 'included' ? 'Included in SoA' : appKey === 'excluded' ? 'Excluded from SoA' : 'Undecided - set on the SoA page';
+    %>
+      <div style="margin-bottom:14px;padding:10px 14px;border:1px solid var(--border);border-radius:6px;background:var(--bg-subtle);display:flex;align-items:center;gap:10px;">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight: 500;color:<%= appColor %>;">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:<%= appColor %>;"></span>
+          <%= appLabel %>
+        </span>
+        <% if (state.inclusion_justification && appKey === 'included') { %>
+          <span class="meta text-xs" style="font-style:italic;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">"<%= state.inclusion_justification %>"</span>
+        <% } else if (state.exclusion_justification && appKey === 'excluded') { %>
+          <span class="meta text-xs" style="font-style:italic;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">"<%= state.exclusion_justification %>"</span>
+        <% } else { %>
+          <span class="meta text-xs" style="flex:1;">Applicability + justification are decided on the SoA page once the gap and risk picture is in.</span>
+        <% } %>
+        <a href="/workspaces/<%= ws.id %>/soa#<%= item.id %>" class="link-muted text-xs" style="white-space:nowrap;">Open SoA →</a>
+      </div>
+    <% } %>
+
+    <% if (priorPassNotes && priorPassNotes.length) { %>
+      <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg-subtle);">
+        <div class="panel-pad text-base text-secondary" style="padding:8px 14px;border-bottom:1px solid var(--border);font-weight: 500;display:flex;align-items:center;gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Notes from prior passes <span class="meta" style="font-weight:400;">- read-only context for re-assessment</span>
+        </div>
+        <% priorPassNotes.forEach((p, i) => {
+             const isCollapsed = i > 0;
+        %>
+          <details <%= isCollapsed ? '' : 'open' %> style="border-bottom:<%= i < priorPassNotes.length - 1 ? '1px dashed var(--border)' : 'none' %>;">
+            <summary class="text-base" style="padding:8px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;">
+              <span class="text-ink" style="font-weight: 500;">Pass <%= p.pass_number %></span>
+              <% if (p.label) { %><span><%= p.label %></span><% } %>
+              <% if (p.pass_status === 'completed' && p.completed_at) { %>
+                <span class="meta text-eyebrow">completed <%= p.completed_at.slice(0,10) %></span>
+              <% } else if (p.pass_status === 'in_progress') { %>
+                <span class="tag tag-accent" style="font-size:9.5px;">IN PROGRESS</span>
+              <% } %>
+              <% if (p.item_status) { %>
+                <span class="status s-<%= p.item_status.toLowerCase().replace(/\s+/g,'-') %> text-xs" style="margin-left:auto;"><%= p.item_status %></span>
+              <% } %>
+            </summary>
+            <div class="text-md" style="padding:0 14px 10px;line-height:1.55;white-space:pre-wrap;"><%= p.notes %></div>
+          </details>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <div style="margin-bottom:14px;">
+      <label class="label">
+        Notes
+        <% if (activePass) { %>
+          <span class="meta" style="font-weight:400;">- for <strong style="color:var(--accent);">Pass <%= activePass.pass_number %><% if (activePass.label) { %> · <%= activePass.label %><% } %></strong> only. Prior pass notes preserved above.</span>
+        <% } else { %>
+          <span class="meta">current state, gaps, planned actions</span>
+        <% } %>
+      </label>
+      <textarea class="textarea" name="notes" rows="3" placeholder="<%= priorPassNotes && priorPassNotes.length ? 'For this pass: verify what was implemented, what\'s still outstanding, what evidence you saw.' : 'Describe what\'s in place today, what\'s missing, and what you\'ll do about it.' %>"><%= currentPassNotes %></textarea>
+    </div>
+
+    <div class="assessment-form-actions" style="display:flex;gap:6px;align-items:center;justify-content:space-between;">
+      <a href="/workspaces/<%= ws.id %>/controls/<%= item.id %>/history" class="meta link-muted text-base">View change history →</a>
+      <div class="row">
+        <button name="action" value="skip" class="btn btn-secondary btn-xs" formnovalidate>Skip for now</button>
+        <button name="action" value="save" class="btn btn-primary">Record conclusion &amp; next →</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<%- include('partials/assessment_review',{state,reviewContext,user,ws,item,requestedByName,reviewedByName,path:`/workspaces/${ws.id}/controls/assess/${item.id}`}) %>
+
+<%- include('partials/comments_thread', { parent_type: 'iso_item', parent_id: item.id, comments, ws, user, firmUsers }) %>
+
+<div class="assessment-support-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+  <div class="panel">
+    <div class="panel-head">
+      <h2 class="text-xl">Evidence files (<%= evidenceList ? evidenceList.length : 0 %>)</h2>
+      <span class="meta">Files attached to this <%= isClause ? 'clause' : 'control' %></span>
+    </div>
+    <form class="assessment-upload-grid" method="POST" action="/workspaces/<%= ws.id %>/evidence" enctype="multipart/form-data" style="padding:10px 14px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;">
+      <input type="hidden" name="iso_item_id" value="<%= item.id %>">
+      <div class="col-full"><input class="text-base" type="file" name="file" required style="width:100%;"></div>
+      <div><label class="label text-xxs">Period (e.g., Q1 2026) - optional</label><input type="text" name="period_label" class="input text-base" placeholder="Q1 2026"></div>
+      <div><label class="label text-xxs">Sub-clause / section</label><input type="text" name="clause_section" class="input text-base" placeholder="e.g., A.5.18.b"></div>
+      <div></div>
+      <div><label class="label text-xxs">Valid from</label><input type="date" name="valid_from" class="input text-base"></div>
+      <div><label class="label text-xxs">Valid until</label><input type="date" name="valid_until" class="input text-base"></div>
+      <div></div>
+      <div class="col-full" style="display:flex;gap:6px;align-items:end;">
+        <input type="text" name="description" placeholder="Optional note about what this evidences" class="input text-base" style="flex:1;">
+        <button class="btn btn-primary btn-xs">Upload evidence</button>
+      </div>
+    </form>
+    <% if (!evidenceList || evidenceList.length === 0) { %>
+      <div class="panel-pad meta text-base">No evidence yet.</div>
+    <% } else { %>
+      <%
+        const today = new Date().toISOString().slice(0,10);
+        const expSoon = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
+      %>
+      <div style="max-height:280px;overflow-y:auto;">
+        <% evidenceList.forEach(e => {
+             const isExpired = e.valid_until && e.valid_until < today;
+             const isExpiringSoon = !isExpired && e.valid_until && e.valid_until < expSoon;
+             const badgeColor = isExpired ? '#b91c1c' : isExpiringSoon ? '#a16207' : '#16a34a';
+             const badgeLabel = isExpired ? 'EXPIRED' : isExpiringSoon ? 'EXPIRES SOON' : (e.valid_until ? 'CURRENT' : null);
+        %>
+          <div style="padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;<%= isExpired ? 'background:rgba(185,28,28,0.04);' : '' %>">
+            <div style="flex:1;min-width:0;">
+              <div class="row-center">
+                <a href="/workspaces/<%= ws.id %>/evidence/<%= e.id %>/download" style="text-decoration:none;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;"><%= e.filename %></a>
+                <% if (badgeLabel) { %><span style="font-size:9px;font-weight: 500;color:white;background:<%= badgeColor %>;padding:1px 5px;border-radius:3px;letter-spacing:0.05em;"><%= badgeLabel %></span><% } %>
+                <% if (e.clause_section) { %><span class="mono meta text-eyebrow" style="background:var(--bg-subtle);padding:1px 4px;border-radius:3px;">§<%= e.clause_section %></span><% } %>
+                <% if (e.link_count && e.link_count > 1) { %><span class="mono text-xxs" style="color:#475569;background:rgba(71,85,105,0.10);padding:1px 5px;border-radius:3px;" title="Linked to <%= e.link_count %> controls/clauses">×<%= e.link_count %></span><% } %>
+              </div>
+              <div class="meta text-xs"><%= e.uploader || 'unknown' %> · uploaded <%= e.uploaded_at ? e.uploaded_at.slice(0,10) : '' %><% if (e.period_label) { %> · period <%= e.period_label %><% } %><% if (e.valid_until) { %> · valid until <%= e.valid_until %><% } %><% if (e.description) { %> · <%= e.description %><% } %></div>
+            </div>
+            <form method="POST" action="/workspaces/<%= ws.id %>/evidence/<%= e.id %>/delete" onsubmit="return appConfirmForm(event, 'Delete this evidence file?')"><button class="btn btn-ghost btn-xs text-xxs text-secondary">×</button></form>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2 class="text-xl">Open nonconformities (<%= openNCs ? openNCs.length : 0 %>)</h2>
+      <span class="meta">NCs raised against this item</span>
+    </div>
+    <% if (!openNCs || openNCs.length === 0) { %>
+      <div class="panel-pad meta text-base">No open NCs.</div>
+    <% } else { %>
+      <div style="max-height:300px;overflow-y:auto;">
+        <% openNCs.forEach(n => {
+             const sev = n.severity === 'major' ? '#b91c1c' : n.severity === 'minor' ? '#a16207' : 'var(--text-secondary)';
+        %>
+          <a class="text-base" href="/workspaces/<%= ws.id %>/nonconformities/<%= n.id %>" style="display:block;padding:8px 14px;border-bottom:1px solid var(--border);text-decoration:none;">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <span style="font-weight:500;flex:1;"><%= n.title %></span>
+              <span class="tag" style="background:<%= sev %>;color:white;font-size:10px;"><%= n.severity %></span>
+            </div>
+            <div class="meta text-xs">Status: <%= n.status %><% if (n.due_date) { %> · due <%= n.due_date %><% } %></div>
+          </a>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<div class="assessment-support-grid" style="display:grid;grid-template-columns:<%= isClause ? '1fr' : '1fr 1fr' %>;gap:14px;margin-bottom:16px;">
+  <% if (!isClause) { %>
+  <div class="panel">
+    <div class="panel-head">
+      <h2 class="text-xl">Risks treated by this control (<%= linkedRisks ? linkedRisks.length : 0 %>)</h2>
+    </div>
+    <% if (!linkedRisks || linkedRisks.length === 0) { %>
+      <div class="panel-pad meta text-base">No risks linked. <a href="/workspaces/<%= ws.id %>/risks" style="color:var(--accent);">Link from the risk register →</a></div>
+    <% } else { %>
+      <div style="max-height:240px;overflow-y:auto;">
+        <% linkedRisks.forEach(r => { %>
+          <a class="text-base" href="/workspaces/<%= ws.id %>/risks/<%= r.id %>" style="display:flex;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);text-decoration:none;">
+            <span style="flex:1;"><span class="mono meta" style="margin-right:6px;">R-<%= r.id %></span><%= r.title %></span>
+            <span class="num meta text-xs"><%= r.likelihood %>×<%= r.impact %></span>
+          </a>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+  <% } %>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2 class="text-xl">Documents covering this <%= isClause ? 'clause' : 'control' %> (<%= linkedDocs ? linkedDocs.length : 0 %>)</h2>
+    </div>
+    <% if (!linkedDocs || linkedDocs.length === 0) { %>
+      <div class="panel-pad meta text-base">No documents linked yet - pick one below or generate a template from the document library.</div>
+    <% } else { %>
+      <div style="max-height:240px;overflow-y:auto;">
+        <% linkedDocs.forEach(d => { %>
+          <div class="text-base" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);">
+            <a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>" style="text-decoration:none;flex:1;min-width:0;">
+              <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><%= d.name %></div>
+              <div class="meta text-xs"><%= d.category || '-' %> · <%= d.status || '-' %><% if (d.section_ref) { %> · §<%= d.section_ref %><% } %></div>
+            </a>
+            <form method="POST" action="/workspaces/<%= ws.id %>/controls/<%= item.id %>/documents/<%= d.link_id %>/delete" onsubmit="return appConfirmForm(event, 'Remove this document link?')" style="margin:0;">
+              <button class="btn btn-ghost btn-xs text-xxs text-secondary" title="Remove link">×</button>
+            </form>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+    <% if (linkableDocs && linkableDocs.length > 0) { %>
+      <form class="assessment-link-form" method="POST" action="/workspaces/<%= ws.id %>/controls/<%= item.id %>/documents" style="padding:8px 14px;border-top:1px solid var(--border);background:var(--bg-subtle);display:grid;grid-template-columns:1fr 100px auto;gap:6px;align-items:end;">
+        <div>
+          <label class="label text-xxs">Link a document</label>
+          <select class="select text-base" name="document_id" required>
+            <option value="">- pick a document -</option>
+            <% linkableDocs.forEach(d => { %>
+              <option value="<%= d.id %>"><%= d.name %><% if (d.status) { %> (<%= d.status %>)<% } %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label class="label text-xxs">Section</label>
+          <input class="input text-base" name="section_ref" placeholder="e.g. §4.2">
+        </div>
+        <button class="btn btn-primary btn-xs">Link</button>
+      </form>
+    <% } else if (linkedDocs && linkedDocs.length > 0) { %>
+      <div class="meta panel-pad text-sm" style="border-top:1px solid var(--border);background:var(--bg-subtle);">All workspace documents are already linked. <a href="/workspaces/<%= ws.id %>/documents" style="color:var(--accent);">Generate another →</a></div>
+    <% } else { %>
+      <div class="meta panel-pad text-sm" style="border-top:1px solid var(--border);background:var(--bg-subtle);">This client has no documents yet. <a href="/workspaces/<%= ws.id %>/documents" style="color:var(--accent);">Generate one from a template →</a></div>
+    <% } %>
+  </div>
+</div>
+
+<script>
+(function () {
+const QUESTION_TEXTS = <%- jsonForScript(questions || []) %>;
+
+function diagnosticValue(index) {
+  const field = document.querySelector('input[data-diagnostic-value][name="q_' + index + '"]');
+  return field ? field.value : '';
+}
+
+document.addEventListener('draftrestored',()=>{if(window.recomputeSuggested)window.recomputeSuggested();});
+const assessmentCopilotPanel = document.getElementById('assessmentCopilotPanel');
+const assessmentCopilotButton = document.getElementById('assessmentCopilotButton');
+const assessmentCopilotStatus = document.getElementById('assessmentCopilotStatus');
+const assessmentCopilotError = document.getElementById('assessmentCopilotError');
+const assessmentCopilotResult = document.getElementById('assessmentCopilotResult');
+const assessmentCopilotApplyScoring = document.getElementById('assessmentCopilotApplyScoring');
+const assessmentCopilotAppendNotes = document.getElementById('assessmentCopilotAppendNotes');
+const assessmentCopilotAcknowledgement = document.getElementById('assessmentCopilotAcknowledgement');
+const assessmentCopilotGroundingResult = document.getElementById('assessmentCopilotGroundingResult');
+const assessmentCopilotGroundingStatus = document.getElementById('assessmentCopilotGroundingStatus');
+const assessmentCopilotGroundingSummary = document.getElementById('assessmentCopilotGroundingSummary');
+const assessmentCopilotGroundingLimitations = document.getElementById('assessmentCopilotGroundingLimitations');
+const assessmentAiModelSelect = document.getElementById('assessmentAiModelSelect');
+const ASSESSMENT_COPILOT_CONFIGURED = <%= aiConfigured ? 'true' : 'false' %>;
+const ASSESSMENT_COPILOT_DISCLOSURE_VERSION = 'assessment_copilot_automatic_grounding_v2';
+let assessmentCopilotDraft = null;
+let assessmentCopilotFingerprint = '';
+let assessmentCopilotDraftStale = false;
+let assessmentCopilotBusy = false;
+
+if (window._assessmentCopilotAbort) {
+  window._assessmentCopilotAbort.abort();
+  window._assessmentCopilotAbort = null;
+}
+
+function currentAssessmentDraft() {
+  const form = document.getElementById('assessForm');
+  const status = form && form.querySelector('select[name="status"]');
+  const maturity = form && form.querySelector('select[name="maturity"]');
+  const notes = form && form.querySelector('textarea[name="notes"]');
+  const snapshot = form && form.querySelector('input[name="last_updated_snapshot"]');
+  const stateFingerprint = form && form.querySelector('input[name="state_fingerprint_snapshot"]');
+  const answers = {};
+  for (let i = 0; i < QUESTION_TEXTS.length; i++) {
+    const value = diagnosticValue(i);
+    if (['yes','partial','no'].includes(value)) answers[String(i)] = value;
+  }
+  return {
+    status: status ? status.value : 'Not Assessed',
+    maturity: maturity ? maturity.value : '0',
+    notes: notes ? notes.value : '',
+    last_updated_snapshot: snapshot ? snapshot.value : '',
+    state_fingerprint_snapshot: stateFingerprint ? stateFingerprint.value : '',
+    answers: answers
+  };
+}
+
+function currentAssessmentFingerprint() {
+  const draft = currentAssessmentDraft();
+  return JSON.stringify({
+    status: draft.status,
+    maturity: draft.maturity,
+    notes: draft.notes,
+    answers: draft.answers
+  });
+}
+
+function assessmentCopilotAcknowledged() {
+  return !!(assessmentCopilotAcknowledgement && assessmentCopilotAcknowledgement.checked);
+}
+
+function updateAssessmentCopilotButton() {
+  if (!assessmentCopilotButton) return;
+  assessmentCopilotButton.textContent = 'Draft assessment';
+  assessmentCopilotButton.disabled = assessmentCopilotBusy
+    || !ASSESSMENT_COPILOT_CONFIGURED
+    || !assessmentCopilotAcknowledged();
+}
+
+function clearAssessmentCopilotAcknowledgement() {
+  if (assessmentCopilotAcknowledgement) assessmentCopilotAcknowledgement.checked = false;
+  updateAssessmentCopilotButton();
+}
+
+function setAssessmentCopilotBusy(busy) {
+  assessmentCopilotBusy = !!busy;
+  if (assessmentCopilotPanel) assessmentCopilotPanel.setAttribute('aria-busy', busy ? 'true' : 'false');
+  updateAssessmentCopilotButton();
+}
+
+function showAssessmentCopilotError(message) {
+  if (assessmentCopilotStatus) assessmentCopilotStatus.style.display = 'none';
+  if (!assessmentCopilotError) return;
+  assessmentCopilotError.textContent = message || 'The copilot could not create a draft.';
+  assessmentCopilotError.style.display = '';
+}
+
+const assessmentCopilotListIds = {
+  gaps: 'assessmentCopilotGaps',
+  missing_evidence: 'assessmentCopilotMissingEvidence',
+  follow_up_questions: 'assessmentCopilotQuestions',
+  recommended_actions: 'assessmentCopilotActions',
+  limitations: 'assessmentCopilotLimitations',
+  sources: 'assessmentCopilotSources'
+};
+
+function renderAssessmentCopilotList(name, values) {
+  if (!assessmentCopilotResult) return;
+  const section = assessmentCopilotResult.querySelector('[data-copilot-list-section="' + name + '"]');
+  const list = document.getElementById(assessmentCopilotListIds[name]);
+  if (!section || !list) return;
+  list.replaceChildren();
+  const rows = Array.isArray(values) ? values : [];
+  rows.forEach(function (value) {
+    const li = document.createElement('li');
+    if (name === 'sources' && value && typeof value === 'object') {
+      const label = boundedAssessmentCopilotText(value.label || value.ref, 'Unnamed source', 300);
+      const ref = boundedAssessmentCopilotText(value.ref, '', 160);
+      li.textContent = label + (ref ? ' [' + ref + ']' : '');
+    } else {
+      li.textContent = boundedAssessmentCopilotText(value, '', 700);
+    }
+    list.appendChild(li);
+  });
+  section.style.display = rows.length ? '' : 'none';
+}
+
+function boundedAssessmentCopilotText(value, fallback, limit) {
+  const text = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  return (text || fallback).slice(0, limit);
+}
+
+function nonNegativeAssessmentCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;
+}
+
+function retrievalConsideredCount(source, kind) {
+  if (!source || typeof source !== 'object') return 0;
+  const keys = kind === 'policy'
+    ? ['documents_considered', 'policies_considered', 'sources_considered']
+    : ['evidence_considered', 'files_considered', 'sources_considered'];
+  for (const key of keys) {
+    if (source[key] !== undefined) return nonNegativeAssessmentCount(source[key]);
+  }
+  return 0;
+}
+
+function retrievalStatusSentence(label, source, kind) {
+  const status = boundedAssessmentCopilotText(source && source.status, 'not reported', 80);
+  const considered = retrievalConsideredCount(source, kind);
+  const used = nonNegativeAssessmentCount(source && source.passages_used);
+  const noun = kind === 'policy' ? 'controlled document' : 'evidence file';
+  return label + ': ' + status + '. ' + considered + ' ' + noun + (considered === 1 ? '' : 's')
+    + ' considered; ' + used + ' passage' + (used === 1 ? '' : 's') + ' used.';
+}
+
+function renderAssessmentCopilotRetrieval(retrieval) {
+  if (!assessmentCopilotGroundingResult || !assessmentCopilotGroundingSummary) return;
+  assessmentCopilotGroundingSummary.replaceChildren();
+  if (assessmentCopilotGroundingLimitations) {
+    assessmentCopilotGroundingLimitations.textContent = '';
+    assessmentCopilotGroundingLimitations.style.display = 'none';
+  }
+
+  const details = retrieval && typeof retrieval === 'object' ? retrieval : null;
+  if (!details) {
+    if (assessmentCopilotGroundingStatus) {
+      assessmentCopilotGroundingStatus.textContent = 'Automatic retrieval details were not returned for this draft.';
+    }
+    const empty = document.createElement('li');
+    empty.textContent = 'No policy or Evidence Library source was reported as considered.';
+    assessmentCopilotGroundingSummary.appendChild(empty);
+    assessmentCopilotGroundingResult.style.display = '';
+    return;
+  }
+
+  if (assessmentCopilotGroundingStatus) {
+    assessmentCopilotGroundingStatus.textContent = retrievalStatusSentence('Policy', details.policy, 'policy')
+      + ' ' + retrievalStatusSentence('Evidence Library', details.evidence, 'evidence');
+  }
+
+  const sources = Array.isArray(details.sources) ? details.sources.slice(0, 12) : [];
+  sources.forEach(function (source) {
+    if (!source || typeof source !== 'object') return;
+    const type = boundedAssessmentCopilotText(source.source_type, 'source', 40);
+    const label = boundedAssessmentCopilotText(source.label, 'Unnamed source', 300);
+    const ref = boundedAssessmentCopilotText(source.ref, '', 160);
+    const li = document.createElement('li');
+    li.textContent = type + ': ' + label + (ref ? ' [' + ref + ']' : '');
+    assessmentCopilotGroundingSummary.appendChild(li);
+  });
+  if (!assessmentCopilotGroundingSummary.childElementCount) {
+    const empty = document.createElement('li');
+    empty.textContent = 'No policy or Evidence Library passage was used. Copilot relied on the governed assessment context shown above.';
+    assessmentCopilotGroundingSummary.appendChild(empty);
+  }
+
+  const limitations = (Array.isArray(details.limitations) ? details.limitations : [])
+    .slice(0, 6)
+    .map(function (value) { return boundedAssessmentCopilotText(value, '', 300); })
+    .filter(Boolean);
+  if (assessmentCopilotGroundingLimitations && limitations.length) {
+    assessmentCopilotGroundingLimitations.textContent = 'Retrieval limitations: ' + limitations.join(' ');
+    assessmentCopilotGroundingLimitations.style.display = '';
+  }
+  assessmentCopilotGroundingResult.style.display = '';
+}
+
+function updateAssessmentCopilotAssessmentContext() {
+  const summary = document.getElementById('assessmentCopilotAssessmentContext');
+  if (!summary) return;
+  let answered = 0;
+  for (let i = 0; i < QUESTION_TEXTS.length; i++) {
+    if (['yes','partial','no'].includes(diagnosticValue(i))) answered++;
+  }
+  const form = document.getElementById('assessForm');
+  const notes = form && form.querySelector('textarea[name="notes"]');
+  summary.textContent = answered + ' of ' + QUESTION_TEXTS.length + ' diagnostic question'
+    + (QUESTION_TEXTS.length === 1 ? '' : 's') + ' answered; '
+    + (notes && notes.value.trim() ? 'current draft notes included.' : 'no current draft notes.');
+}
+
+function markAssessmentCopilotStale() {
+  assessmentCopilotDraftStale = true;
+  const warning = document.getElementById('assessmentCopilotStale');
+  if (warning) warning.style.display = '';
+  if (assessmentCopilotApplyScoring) assessmentCopilotApplyScoring.disabled = true;
+  if (assessmentCopilotAppendNotes) assessmentCopilotAppendNotes.disabled = true;
+}
+
+function assessmentCopilotCanApply() {
+  if (!assessmentCopilotDraft || assessmentCopilotDraftStale) return false;
+  if (currentAssessmentFingerprint() !== assessmentCopilotFingerprint) {
+    markAssessmentCopilotStale();
+    return false;
+  }
+  return true;
+}
+
+function renderAssessmentCopilotDraft(data, requestFingerprint) {
+  const draft = data && data.suggestion;
+  if (!draft || !assessmentCopilotResult) return false;
+  assessmentCopilotDraft = draft;
+  assessmentCopilotFingerprint = requestFingerprint;
+  assessmentCopilotDraftStale = currentAssessmentFingerprint() !== requestFingerprint;
+
+  document.getElementById('assessmentCopilotStatusValue').textContent = String(draft.status || 'Not Assessed');
+  document.getElementById('assessmentCopilotMaturityValue').textContent = String(draft.maturity == null ? 0 : draft.maturity) + ' / 5';
+  document.getElementById('assessmentCopilotConfidenceValue').textContent = String(draft.confidence || 'low').replace(/^./, function (c) { return c.toUpperCase(); });
+  document.getElementById('assessmentCopilotRationale').textContent = String(draft.rationale || 'No rationale was returned.');
+  renderAssessmentCopilotList('gaps', draft.gaps);
+  renderAssessmentCopilotList('missing_evidence', draft.missing_evidence);
+  renderAssessmentCopilotList('follow_up_questions', draft.follow_up_questions);
+  renderAssessmentCopilotList('recommended_actions', draft.recommended_actions);
+  renderAssessmentCopilotList('limitations', draft.limitations);
+  renderAssessmentCopilotList('sources', draft.sources);
+  renderAssessmentCopilotRetrieval(data.retrieval);
+
+  const modelNote = document.getElementById('assessmentCopilotModel');
+  if (modelNote) {
+    const provider = data.provider ? String(data.provider) + ' / ' : '';
+    modelNote.textContent = 'Generated with ' + provider + String(data.model || 'configured model') + '. Review every field before use.';
+  }
+  const warning = document.getElementById('assessmentCopilotStale');
+  if (warning) warning.style.display = assessmentCopilotDraftStale ? '' : 'none';
+  if (assessmentCopilotApplyScoring) assessmentCopilotApplyScoring.disabled = assessmentCopilotDraftStale;
+  if (assessmentCopilotAppendNotes) assessmentCopilotAppendNotes.disabled = assessmentCopilotDraftStale || !String(draft.notes_draft || '').trim();
+  assessmentCopilotResult.style.display = '';
+  return true;
+}
+
+async function generateAssessmentCopilotDraft() {
+  if (!assessmentCopilotPanel || !assessmentCopilotButton) return;
+  if (!assessmentCopilotAcknowledged()) {
+    showAssessmentCopilotError('Confirm the external AI processing warning before drafting this assessment.');
+    return;
+  }
+  const requestDraft = currentAssessmentDraft();
+  const requestFingerprint = currentAssessmentFingerprint();
+  const itemId = assessmentCopilotPanel.getAttribute('data-item-id');
+  const endpoint = assessmentCopilotPanel.getAttribute('data-endpoint');
+  const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || window._csrfToken || '';
+  const controller = new AbortController();
+  window._assessmentCopilotAbort = controller;
+  assessmentCopilotDraft = null;
+  assessmentCopilotDraftStale = false;
+  if (assessmentCopilotResult) assessmentCopilotResult.style.display = 'none';
+  if (assessmentCopilotGroundingResult) assessmentCopilotGroundingResult.style.display = 'none';
+  if (assessmentCopilotError) assessmentCopilotError.style.display = 'none';
+  if (assessmentCopilotStatus) {
+    assessmentCopilotStatus.textContent = 'Finding relevant governed policy and Evidence Library context, then drafting an assessment. Large free models can take several minutes.';
+    assessmentCopilotStatus.style.display = '';
+  }
+  setAssessmentCopilotBusy(true);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      credentials: 'same-origin',
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: assessmentAiModelSelect ? assessmentAiModelSelect.value : '',
+        last_updated_snapshot: requestDraft.last_updated_snapshot,
+        state_fingerprint_snapshot: requestDraft.state_fingerprint_snapshot,
+        status: requestDraft.status,
+        maturity: requestDraft.maturity,
+        notes: requestDraft.notes,
+        answers: requestDraft.answers,
+        automatic_context: true,
+        ai_external_ack: 'accepted',
+        ai_data_classification: 'non_confidential_trial',
+        ai_disclosure_version: ASSESSMENT_COPILOT_DISCLOSURE_VERSION
+      })
+    });
+    const data = await response.json().catch(function () { return { ok: false, error: 'Unexpected response from the copilot endpoint.' }; });
+    if (controller.signal.aborted || !assessmentCopilotPanel.isConnected || assessmentCopilotPanel.getAttribute('data-item-id') !== itemId) return;
+    if (!response.ok || !data.ok || !data.suggestion) {
+      showAssessmentCopilotError((data && data.error) || 'No assessment draft was returned.');
+      return;
+    }
+    if (assessmentCopilotStatus) assessmentCopilotStatus.style.display = 'none';
+    if (!renderAssessmentCopilotDraft(data, requestFingerprint)) {
+      showAssessmentCopilotError('The copilot response was incomplete. Try a different model.');
+      return;
+    }
+    assessmentCopilotResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (error) {
+    if (error && error.name === 'AbortError') return;
+    showAssessmentCopilotError('Could not reach the copilot. Check your connection and try again.');
+  } finally {
+    clearAssessmentCopilotAcknowledgement();
+    if (window._assessmentCopilotAbort === controller) window._assessmentCopilotAbort = null;
+    if (assessmentCopilotPanel && assessmentCopilotPanel.isConnected) setAssessmentCopilotBusy(false);
+  }
+}
+
+if (assessmentCopilotButton) assessmentCopilotButton.addEventListener('click', generateAssessmentCopilotDraft);
+if (assessmentCopilotAcknowledgement) assessmentCopilotAcknowledgement.addEventListener('change', updateAssessmentCopilotButton);
+if (assessmentAiModelSelect) assessmentAiModelSelect.addEventListener('change', function () {
+  const selectedModel = document.getElementById('assessmentCopilotSelectedModel');
+  if (selectedModel) selectedModel.textContent = assessmentAiModelSelect.value;
+  clearAssessmentCopilotAcknowledgement();
+});
+document.querySelectorAll('input[data-diagnostic-value]').forEach(function (field) {
+  field.disabled = false;
+  field.addEventListener('change', updateAssessmentCopilotAssessmentContext);
+});
+const assessmentNotes = document.querySelector('#assessForm textarea[name="notes"]');
+if (assessmentNotes) assessmentNotes.addEventListener('input', updateAssessmentCopilotAssessmentContext);
+updateAssessmentCopilotAssessmentContext();
+updateAssessmentCopilotButton();
+
+if (assessmentCopilotApplyScoring) assessmentCopilotApplyScoring.addEventListener('click', function () {
+  if (!assessmentCopilotCanApply()) return;
+  const form = document.getElementById('assessForm');
+  const status = form && form.querySelector('select[name="status"]');
+  const maturity = form && form.querySelector('select[name="maturity"]');
+  if (status && Array.from(status.options).some(function (option) { return option.value === assessmentCopilotDraft.status; })) {
+    status.value = assessmentCopilotDraft.status;
+    status.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  if (maturity) {
+    maturity.value = String(assessmentCopilotDraft.maturity);
+    maturity.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  assessmentCopilotFingerprint = currentAssessmentFingerprint();
+  if (assessmentCopilotStatus) {
+    assessmentCopilotStatus.textContent = 'Status and capability copied into the form as a draft. Review them, then use Record conclusion & next when you are ready.';
+    assessmentCopilotStatus.style.display = '';
+  }
+});
+
+if (assessmentCopilotAppendNotes) assessmentCopilotAppendNotes.addEventListener('click', function () {
+  if (!assessmentCopilotCanApply()) return;
+  const form = document.getElementById('assessForm');
+  const notes = form && form.querySelector('textarea[name="notes"]');
+  const draftNotes = String(assessmentCopilotDraft.notes_draft || '').trim();
+  if (!notes || !draftNotes) return;
+  if (!notes.value.includes(draftNotes)) {
+    const prefix = notes.value.trim() ? notes.value.trim() + '\n\n' : '';
+    notes.value = prefix + 'Assessment copilot draft - review and verify:\n' + draftNotes;
+    notes.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  assessmentCopilotFingerprint = currentAssessmentFingerprint();
+  notes.focus();
+  if (assessmentCopilotStatus) {
+    assessmentCopilotStatus.textContent = 'Notes appended as a draft. Verify every statement against the underlying evidence before saving.';
+    assessmentCopilotStatus.style.display = '';
+  }
+});
+
+window.toggleDiagnosticAnswer = function (button) {
+  const group = button && button.closest('[data-diagnostic-group]');
+  const field = group && group.querySelector('input[data-diagnostic-value]');
+  if (!group || !field) return;
+  const selected = button.getAttribute('data-diagnostic-option') || '';
+  field.value = field.value === selected ? '' : selected;
+  group.querySelectorAll('[data-diagnostic-option]').forEach(candidate => {
+    candidate.setAttribute('aria-pressed', candidate.getAttribute('data-diagnostic-option') === field.value ? 'true' : 'false');
+  });
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  field.dispatchEvent(new Event('change', { bubbles: true }));
+  window.recomputeSuggested();
+};
+
+window.applySuggested = function (e) {
+  if (e) e.preventDefault();
+  const txt = document.getElementById('suggestedStatusText');
+  const sel = document.querySelector('select[name="status"]');
+  if (!txt || !sel) return;
+  const val = txt.textContent.trim();
+  const allowed = ['Implemented','Partially Implemented','Work In Progress','Not Implemented'];
+  if (!allowed.includes(val)) return;
+  for (const o of sel.options) { if (o.value === val) { sel.value = val; break; } }
+};
+
+window.prefillNotesFromGaps = function (e) {
+  if (e) e.preventDefault();
+  const ta = document.querySelector('textarea[name="notes"]');
+  if (!ta) return;
+  const lines = ['Gaps identified during assessment:'];
+  for (let i = 0; i < QUESTION_TEXTS.length; i++) {
+    const value = diagnosticValue(i);
+    if (value === 'no') lines.push('- [No] ' + QUESTION_TEXTS[i]);
+    else if (value === 'partial') lines.push('- [Partial] ' + QUESTION_TEXTS[i]);
+  }
+  if (lines.length === 1) {
+    appAlert('No gaps to pre-fill - answer questions with No or Partial first.');
+    return;
+  }
+  ta.value = (ta.value && ta.value.trim() ? ta.value.trim() + '\n\n' : '') + lines.join('\n');
+  ta.focus();
+};
+
+const QUESTION_COUNT = <%= questions ? questions.length : 0 %>;
+window.recomputeSuggested = function () {
+  if (QUESTION_COUNT === 0) return;
+  const score = { yes: 1, partial: 0.5, no: 0 };
+  let total = 0, count = 0;
+  for (let i = 0; i < QUESTION_COUNT; i++) {
+    const value = diagnosticValue(i);
+    if (value) { total += score[value] || 0; count++; }
+  }
+  const hint = document.getElementById('suggestedStatusHint');
+  const text = document.getElementById('suggestedStatusText');
+  if (!hint || !text) return;
+  const applyLink = document.getElementById('applySuggestedLink');
+  if (count < QUESTION_COUNT) {
+    hint.style.display = 'flex';
+    text.textContent = `${count} of ${QUESTION_COUNT} answered…`;
+    text.style.color = 'var(--text-secondary)';
+    if (applyLink) applyLink.style.display = 'none';
+    return;
+  }
+  const ratio = total / count;
+  let status, color;
+  if (ratio >= 0.85)      { status = 'Implemented';            color = '#16a34a'; }
+  else if (ratio >= 0.5)  { status = 'Partially Implemented';  color = '#a16207'; }
+  else if (ratio > 0)     { status = 'Work In Progress';       color = '#ea580c'; }
+  else                    { status = 'Not Implemented';        color = '#b91c1c'; }
+  hint.style.display = 'flex';
+  text.textContent = status;
+  text.style.color = color;
+  if (applyLink) applyLink.style.display = 'inline';
+};
+})();
+</script>
+
+  </div>
+</div>
+
+<%- include('partials/footer') %>

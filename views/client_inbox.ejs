@@ -1,0 +1,129 @@
+<%- include('partials/header', { title: 'Inbox', user, ws, active: 'inbox' }) %>
+<%
+  const highN = computed.filter(i => i.severity === 'high').length;
+  const medN  = computed.filter(i => i.severity === 'medium').length;
+  const dot = sev => sev === 'high' ? '#b91c1c' : sev === 'medium' ? '#b45309' : 'var(--accent)';
+%>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Inbox</h1>
+    <div class="page-subtitle">Everything needing your attention on this client: live items computed from your data, your notifications, and a 30-day plan.</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start;">
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    <% if (computed.length > 0) { %>
+      <div class="panel" style="padding:0;">
+        <div class="panel-head">
+          <h2>Needs your attention <span class="meta text-lg" style="font-weight:400;">· live from data</span></h2>
+          <span class="meta"><strong style="color:#b91c1c;"><%= highN %></strong> high · <strong style="color:#b45309;"><%= medN %></strong> medium</span>
+        </div>
+        <% computed.forEach(c => { %>
+          <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+            <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:<%= dot(c.severity) %>;"></span>
+            <div style="flex:1;min-width:0;">
+              <div class="text-base" style="font-weight:500;"><%= c.title %></div>
+              <% if (c.detail) { %><div class="meta text-sm"><%= c.detail %></div><% } %>
+            </div>
+            <span class="tag tag-neutral text-eyebrow"><%= c.category %></span>
+            <a href="<%= c.link %>" class="btn btn-secondary btn-xs">Open →</a>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <div class="panel" style="padding:0;">
+      <div class="panel-head">
+        <h2>Notifications</h2>
+        <div class="row" style="gap:6px;align-items:center;">
+          <a href="?filter=unread" class="btn <%= filter === 'unread' ? 'btn-primary' : 'btn-secondary' %> btn-xs">Unread</a>
+          <a href="?filter=all" class="btn <%= filter === 'all' ? 'btn-primary' : 'btn-secondary' %> btn-xs">All</a>
+          <% if (notifications.length > 0) { %>
+            <form method="POST" action="/workspaces/<%= ws.id %>/notifications/mark-all-read" style="display:inline;"><button class="btn btn-ghost btn-xs">Mark all read</button></form>
+          <% } %>
+          <span style="width:1px;height:16px;background:var(--border);margin:0 2px;"></span>
+          <% const emailOff = (typeof user !== 'undefined' && user.email_notify === 'off'); %>
+          <form method="POST" action="/me/notification-pref" style="display:inline-flex;align-items:center;gap:4px;">
+            <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+            <input type="hidden" name="return" value="/workspaces/<%= ws.id %>/inbox<%= filter === 'all' ? '?filter=all' : '' %>">
+            <span class="meta text-xs">Email me</span>
+            <button name="value" value="immediate" class="btn <%= emailOff ? 'btn-secondary' : 'btn-primary' %> btn-xs" title="Email me when a new notification is raised">On</button>
+            <button name="value" value="off" class="btn <%= emailOff ? 'btn-primary' : 'btn-secondary' %> btn-xs" title="In-app only, no emails">Off</button>
+          </form>
+        </div>
+      </div>
+      <% if (notifications.length === 0) { %>
+        <div class="t-empty" style="padding:28px 20px;text-align:center;line-height:1.6;">
+          <div style="font-weight:500;color:var(--text);">All caught up</div>
+          <div class="meta">No <%= filter === 'unread' ? 'unread ' : '' %>notifications<% if (computed.length > 0) { %>; see live items above<% } %>.</div>
+        </div>
+      <% } else { %>
+        <% notifications.forEach(n => { %>
+          <div style="padding:12px 18px;border-bottom:1px solid var(--border);<%= n.read_at ? 'opacity:0.6;' : '' %>display:flex;align-items:flex-start;gap:12px;">
+            <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:5px;background:<%= dot(n.severity) %>;"></span>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;gap:8px;">
+                <strong style="font-size:13.5px;"><%= n.title %></strong>
+                <span class="meta text-xs"><%= n.created_at %></span>
+              </div>
+              <% if (n.body) { %><div class="meta text-md text-secondary" style="margin-top:2px;"><%= n.body %></div><% } %>
+              <div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
+                <% if (n.category) { %><span class="tag tag-neutral text-eyebrow"><%= n.category %></span><% } %>
+                <% if (n.link) { %><a href="<%= n.link %>" class="link-muted text-base" style="color:var(--accent);">Open →</a><% } %>
+                <span style="flex:1;"></span>
+                <% if (!n.read_at) { %>
+                  <form method="POST" action="/workspaces/<%= ws.id %>/notifications/<%= n.id %>/read" style="display:inline;"><button class="btn btn-ghost btn-xs">Read</button></form>
+                <% } %>
+                <form method="POST" action="/workspaces/<%= ws.id %>/notifications/<%= n.id %>/dismiss" style="display:inline;"><button class="btn btn-ghost btn-xs">Dismiss</button></form>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      <% } %>
+    </div>
+  </div>
+
+  <aside style="position:sticky;top:18px;">
+    <form method="POST" action="/workspaces/<%= ws.id %>/inbox/plan" class="panel" style="padding:0;" id="planForm">
+      <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+      <div class="panel-head">
+        <h2>30-day plan</h2>
+        <span class="meta text-xs" id="planSavedBadge">&nbsp;</span>
+      </div>
+      <div style="padding:12px 14px;">
+        <textarea name="monthly_plan" id="monthlyPlan" rows="14" placeholder="What you want to get done on this client over the next 30 days. Free-form: checklist, narrative, copy-paste from email, whatever fits. Auto-saves on blur." style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:inherit;font-size:13px;line-height:1.6;color:var(--text);background:var(--bg);resize:vertical;"><%= monthlyPlan %></textarea>
+        <div class="meta text-xs" style="margin-top:8px;">Saves on blur.</div>
+      </div>
+    </form>
+  </aside>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('planForm');
+  const ta = document.getElementById('monthlyPlan');
+  const badge = document.getElementById('planSavedBadge');
+  if (!form || !ta || !badge) return;
+  let lastValue = ta.value;
+  ta.addEventListener('blur', () => {
+    if (ta.value === lastValue) return;
+    const body = new FormData(form);
+    fetch(form.action, { method: 'POST', body }).then(r => {
+      if (r.ok) {
+        const now = new Date();
+        badge.textContent = `Saved · ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        badge.style.color = '#15803d';
+        lastValue = ta.value;
+      } else {
+        badge.textContent = 'Save failed';
+        badge.style.color = '#b91c1c';
+      }
+    });
+  });
+})();
+</script>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,5 @@
+<% const o = locals.row || {}; %>
+<div class="wide"><label class="label">What will be done</label><textarea class="textarea" name="plan_actions" rows="2" placeholder="The actions that achieve the objective"><%= o.plan_actions || '' %></textarea></div>
+<div><label class="label">Resources</label><input class="input" name="resources" value="<%= o.resources || '' %>" placeholder="People, budget, tools"></div>
+<div><label class="label">How results are evaluated</label><input class="input" name="evaluation_method" value="<%= o.evaluation_method || '' %>" placeholder="e.g. Reviewed at each management review"></div>
+<div><label class="label">Communicated on</label><input class="input" type="date" name="communicated_on" value="<%= o.communicated_on || '' %>"></div>

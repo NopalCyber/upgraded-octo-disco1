@@ -1,0 +1,153 @@
+<%- include('partials/header', { title: asset.name, user, ws, active: 'assets' }) %>
+
+<%
+  const canEditAsset = rbac.hasPermission(userPerms, 'asset.update');
+  const linkedToIntake = asset.source_type === 'engagement_intake' && /^crown-jewel-\d+$/.test(asset.source_ref || '');
+%>
+
+<a href="/workspaces/<%= ws.id %>/assets" class="link-muted text-base">← Assets</a>
+
+<div class="page-head" style="margin-top:8px">
+  <div>
+    <h1 class="page-title"><%= asset.name %></h1>
+    <div class="page-subtitle"><%= asset.type || '-' %> · classification <strong><%= asset.classification || '-' %></strong> · CIA <%= asset.cia_c %>/<%= asset.cia_i %>/<%= asset.cia_a %><% if (asset.entity_name) { %> · entity: <%= asset.entity_name %><% } %></div>
+  </div>
+  <% if (canEditAsset && !editMode) { %><a class="btn btn-primary" href="/workspaces/<%= ws.id %>/assets/<%= asset.id %>?edit=1#asset-edit">Edit asset</a><% } %>
+</div>
+
+<% if (linkedToIntake) { %>
+  <div class="panel" style="margin-bottom:14px;padding:12px 16px;background:var(--bg-subtle);display:flex;justify-content:space-between;align-items:center;gap:16px;">
+    <div><strong>Crown-jewel asset</strong><div class="meta text-sm" style="margin-top:3px;">Linked to <%= asset.source_ref.replace('crown-jewel-','Crown jewel #') %> in Client setup. Renaming it here updates that setup answer.</div></div>
+    <a class="btn btn-ghost btn-xs" href="/workspaces/<%= ws.id %>/intake">Open client setup →</a>
+  </div>
+<% } %>
+
+<% if (canEditAsset && editMode) { %>
+<section class="panel" id="asset-edit" style="margin-bottom:14px;">
+  <div class="panel-head"><div><h2>Edit asset</h2><div class="meta text-sm" style="margin-top:3px;">Update ownership, classification, impact and recovery requirements.</div></div></div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/assets/<%= asset.id %>" class="panel-pad" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;">
+    <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+    <input type="hidden" name="version" value="<%= asset.version || 1 %>">
+    <div style="grid-column:1/3;"><label class="label" for="asset-name">Name</label><input class="input" id="asset-name" name="name" maxlength="200" value="<%= asset.name %>" required></div>
+    <div><label class="label" for="asset-type">Type</label><select class="select" id="asset-type" name="type"><% ['information','hardware','software','service','people','intangible'].forEach(value => { %><option value="<%= value %>" <%= asset.type === value ? 'selected' : '' %>><%= value[0].toUpperCase() + value.slice(1) %></option><% }) %></select></div>
+    <div><label class="label" for="asset-classification">Classification</label><select class="select" id="asset-classification" name="classification"><option value="" <%= !asset.classification ? 'selected' : '' %>>Unclassified</option><% ['public','internal','confidential','restricted'].forEach(value => { %><option value="<%= value %>" <%= asset.classification === value ? 'selected' : '' %>><%= value[0].toUpperCase() + value.slice(1) %></option><% }) %></select></div>
+    <div style="grid-column:2/4;"><label class="label" for="asset-owner">Owner</label><input class="input" id="asset-owner" name="owner_name" maxlength="200" value="<%= asset.owner_name || '' %>" placeholder="Person or accountable team"></div>
+    <% [['cia_c','Confidentiality'],['cia_i','Integrity'],['cia_a','Availability']].forEach(([field,label]) => { %>
+      <div><label class="label" for="asset-<%= field %>"><%= label %></label><select class="select" id="asset-<%= field %>" name="<%= field %>"><% [[1,'Low'],[2,'Medium'],[3,'High']].forEach(([score,text]) => { %><option value="<%= score %>" <%= Number(asset[field]) === score ? 'selected' : '' %>><%= score %> · <%= text %></option><% }) %></select></div>
+    <% }) %>
+    <div style="grid-column:1/-1;"><label class="label" for="asset-description">Description</label><textarea class="textarea" id="asset-description" name="description" maxlength="5000" rows="3"><%= asset.description || '' %></textarea></div>
+    <div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:14px;"><div class="meta text-xs" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Business impact and recovery</div></div>
+    <div><label class="label" for="asset-criticality">Business criticality</label><select class="select" id="asset-criticality" name="business_criticality" <%= linkedToIntake ? 'disabled' : '' %>><option value="">Not assessed</option><% ['low','medium','high','critical'].forEach(value => { %><option value="<%= value %>" <%= asset.business_criticality === value ? 'selected' : '' %>><%= value[0].toUpperCase() + value.slice(1) %></option><% }) %></select><% if (linkedToIntake) { %><input type="hidden" name="business_criticality" value="critical"><div class="meta text-sm" style="margin-top:5px;">Locked because this is a crown jewel.</div><% } %></div>
+    <div><label class="label" for="asset-rto">RTO (hours)</label><input class="input" id="asset-rto" type="number" min="0" max="87600" step="1" name="rto_hours" value="<%= asset.rto_hours == null ? '' : asset.rto_hours %>" placeholder="e.g. 4"></div>
+    <div><label class="label" for="asset-rpo">RPO (hours)</label><input class="input" id="asset-rpo" type="number" min="0" max="87600" step="1" name="rpo_hours" value="<%= asset.rpo_hours == null ? '' : asset.rpo_hours %>" placeholder="e.g. 1"></div>
+    <div style="grid-column:1/-1;"><label class="label" for="asset-bia-notes">BIA notes</label><textarea class="textarea" id="asset-bia-notes" name="bia_notes" maxlength="5000" rows="3" placeholder="Business consequence, dependencies and recovery assumptions"><%= asset.bia_notes || '' %></textarea></div>
+    <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;"><a class="btn btn-secondary" href="/workspaces/<%= ws.id %>/assets/<%= asset.id %>">Cancel</a><button class="btn btn-primary" type="submit">Save changes</button></div>
+  </form>
+</section>
+<% } %>
+
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-pad" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;">
+    <div><div class="meta text-xs">Owner</div><strong><%= asset.owner_name || 'Unassigned' %></strong></div>
+    <div><div class="meta text-xs">Business criticality</div><strong style="text-transform:capitalize;"><%= asset.business_criticality || 'Not assessed' %></strong></div>
+    <div><div class="meta text-xs">Recovery objective</div><strong><%= asset.rto_hours == null ? '-' : asset.rto_hours + 'h RTO' %> · <%= asset.rpo_hours == null ? '-' : asset.rpo_hours + 'h RPO' %></strong></div>
+    <div><div class="meta text-xs">Record version</div><strong>v<%= asset.version || 1 %></strong></div>
+    <div style="grid-column:1/-1;"><div class="meta text-xs">Description</div><div style="margin-top:3px;"><%= asset.description || 'No description recorded.' %></div></div>
+    <% if (asset.bia_notes) { %><div style="grid-column:1/-1;"><div class="meta text-xs">BIA notes</div><div style="margin-top:3px;white-space:pre-wrap;"><%= asset.bia_notes %></div></div><% } %>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+
+  <div class="panel">
+    <div class="panel-head"><h2>Depends on (parents)</h2></div>
+    <% if (parents.length) { %>
+      <% parents.forEach(p => { %>
+        <div style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <a href="/workspaces/<%= ws.id %>/assets/<%= p.parent_asset_id %>" class="link-muted"><%= p.asset_name %></a>
+          <span class="meta"><%= p.relation %></span>
+        </div>
+      <% }) %>
+    <% } else { %><div class="t-empty">None.</div><% } %>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h2>Depended on by (children)</h2></div>
+    <% if (children.length) { %>
+      <% children.forEach(c => { %>
+        <div style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <a href="/workspaces/<%= ws.id %>/assets/<%= c.child_asset_id %>" class="link-muted"><%= c.asset_name %></a>
+          <span class="meta"><%= c.relation %></span>
+          <form method="POST" action="/workspaces/<%= ws.id %>/assets/relationships/<%= c.id %>/delete" style="display:inline"><button class="btn btn-ghost btn-xs">×</button></form>
+        </div>
+      <% }) %>
+    <% } else { %><div class="t-empty">None.</div><% } %>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+  <div class="panel-head"><h2>Add relationship</h2></div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/assets/<%= asset.id %>/relationships" class="panel-pad" style="display:grid;grid-template-columns:1fr 200px 1fr auto;gap:8px;align-items:end;">
+    <div><label class="label">Child asset</label><select class="select" name="child_asset_id" required><option value="">-</option><% allAssets.forEach(a => { %><option value="<%= a.id %>"><%= a.name %></option><% }) %></select></div>
+    <div><label class="label">Relation</label><select class="select" name="relation"><option value="hosted_on">hosted on</option><option value="depends_on">depends on</option><option value="processes">processes</option><option value="contains">contains</option></select></div>
+    <div><label class="label">Notes</label><input class="input" name="notes"></div>
+    <div><button class="btn btn-primary btn-xs">Add</button></div>
+  </form>
+</div>
+
+<% if (parents.length || children.length) { %>
+<div class="panel" style="margin-top:14px">
+  <div class="panel-head"><h2>Relationship diagram</h2></div>
+  <svg viewBox="0 0 600 240" style="width:100%;max-width:600px;display:block;margin:0 auto;padding:12px;">
+    <% parents.forEach((p, i) => { const x = 60 + i * 130; %>
+      <g>
+        <rect x="<%= x - 50 %>" y="20" width="100" height="36" rx="4" fill="#f1f5f9" stroke="#475569"/>
+        <text x="<%= x %>" y="42" font-size="11" text-anchor="middle" font-family="system-ui,sans-serif" fill="#3730a3"><%= p.asset_name %></text>
+        <line x1="<%= x %>" y1="56" x2="300" y2="100" stroke="#a1a1aa" stroke-width="1.5"/>
+      </g>
+    <% }) %>
+    <g>
+      <rect x="240" y="100" width="120" height="40" rx="6" fill="#0a0a0a"/>
+      <text x="300" y="124" font-size="12" text-anchor="middle" font-family="system-ui,sans-serif" fill="#fff" font-weight="600"><%= asset.name %></text>
+    </g>
+    <% children.forEach((c, i) => { const x = 60 + i * 130; %>
+      <g>
+        <line x1="300" y1="140" x2="<%= x %>" y2="184" stroke="#a1a1aa" stroke-width="1.5"/>
+        <rect x="<%= x - 50 %>" y="184" width="100" height="36" rx="4" fill="#fef3c7" stroke="#ca8a04"/>
+        <text x="<%= x %>" y="206" font-size="11" text-anchor="middle" font-family="system-ui,sans-serif" fill="#854d0e"><%= c.asset_name %></text>
+      </g>
+    <% }) %>
+  </svg>
+</div>
+<% } %>
+
+<% if (linkedRisks.length) { %>
+<div class="panel" style="margin-top:14px">
+  <div class="panel-head"><h2>Linked risks</h2></div>
+  <% linkedRisks.forEach(r => { %>
+    <div style="padding:8px 16px;border-bottom:1px solid var(--border);"><a href="/workspaces/<%= ws.id %>/risks/<%= r.id %>" class="link-muted"><%= r.title %></a> <span class="meta">L<%= r.likelihood %> × I<%= r.impact %></span></div>
+  <% }) %>
+</div>
+<% } %>
+
+<% if (typeof controlsInScope !== 'undefined' && controlsInScope.length) { %>
+<div class="panel" style="margin-top:14px">
+  <div class="panel-head"><h2>Annex A controls in scope</h2><span class="meta">via this asset's risk treatments</span></div>
+  <table class="t">
+    <thead><tr><th style="width:80px;">ID</th><th>Control</th><th style="width:120px;">Applicability</th><th style="width:170px;">Status</th><th style="width:80px;" title="Documents covering this control">Docs</th></tr></thead>
+    <tbody>
+      <% controlsInScope.forEach(c => { %>
+        <tr>
+          <td class="mono meta"><%= c.id.replace('annex-','').toUpperCase() %></td>
+          <td><a href="/workspaces/<%= ws.id %>/controls/<%= c.id %>" class="link-muted"><%= c.title.replace(/^A\.[0-9.]+ /,'') %></a></td>
+          <td class="meta" style="text-transform:capitalize;"><%= c.applicability %></td>
+          <td class="meta"><%= c.status %></td>
+          <td><% if (c.doc_count > 0) { %><span class="tag tag-info num"><%= c.doc_count %></span><% } else { %><span class="meta">-</span><% } %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
+<%- include('partials/footer') %>

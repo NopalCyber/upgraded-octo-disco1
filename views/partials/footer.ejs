@@ -1,0 +1,950 @@
+    </div>
+  </main>
+</div>
+
+<% if (typeof user !== 'undefined' && user) { %>
+<% const clientFooterMode = user.user_type === 'client' || (typeof clientPreview !== 'undefined' && clientPreview === true); %>
+<div class="cp-backdrop" id="cpBackdrop" onclick="if(event.target===this)closePalette()" role="dialog" aria-modal="true" aria-labelledby="cpSearchLabel" aria-hidden="true" hidden>
+  <div class="cp-modal" tabindex="-1">
+    <span class="sr-only" id="cpSearchLabel">Search <%= clientFooterMode ? 'this engagement' : 'Compliance Sphere' %></span>
+    <div class="cp-search">
+      <svg class="cp-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" id="cpInput" placeholder="<%= clientFooterMode ? 'Search pages in this engagement…' : 'Search controls, risks, documents, clients…' %>" autocomplete="off" spellcheck="false" aria-label="Search">
+      <button type="button" class="btn btn-ghost btn-xs" onclick="closePalette()" aria-label="Close search">Close</button>
+    </div>
+    <div class="cp-results" id="cpResults"><div class="cp-empty">Start typing to search</div></div>
+    <div class="cp-foot">
+      <span><span class="kbd">↑</span> <span class="kbd">↓</span> navigate</span>
+      <span><span class="kbd">↵</span> open</span>
+      <span style="margin-left:auto;"><span class="kbd">esc</span> close</span>
+    </div>
+  </div>
+</div>
+
+<div class="cp-backdrop help-modal" id="helpBackdrop" onclick="if(event.target===this)closeHelp()" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle" aria-hidden="true" hidden>
+  <div class="cp-modal" tabindex="-1">
+    <div class="cp-search" style="padding:14px 18px;border-bottom:1px solid var(--border);">
+      <svg class="text-tertiary" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span class="text-xl" id="helpModalTitle" style="font-weight: 500;flex:1;"><%= clientFooterMode ? 'Portal help' : 'Keyboard shortcuts' %></span>
+      <button type="button" class="btn btn-ghost btn-xs" onclick="closeHelp()" aria-label="Close help">Close</button>
+    </div>
+    <div class="help-shortcuts">
+      <% if (clientFooterMode) { %>
+      <div class="help-row"><span>Search this engagement</span><span><span class="kbd" id="hk1">⌘K</span></span></div>
+      <div class="help-row"><span><strong>Requests</strong><br><small>Provide information, upload files and ask questions.</small></span></div>
+      <div class="help-row"><span><strong>Engagement</strong><br><small>Track agreed deliverables, dates and approvals.</small></span></div>
+      <div class="help-row"><span><strong>Approvals</strong><br><small>Review policies and confirm shared information.</small></span></div>
+      <div class="help-row"><span><strong>Reports</strong><br><small>Open reports released by your engagement team.</small></span></div>
+      <% } else { %>
+      <div class="help-row"><span>Open command palette</span><span><span class="kbd" id="hk1">⌘K</span></span></div>
+      <div class="help-row"><span>Search</span><span><span class="kbd">/</span></span></div>
+      <div class="help-row"><span>Show this help</span><span><span class="kbd">?</span></span></div>
+      <div class="help-row"><span>Toggle dark mode</span><span><span class="kbd" id="hk2">⌘⇧L</span></span></div>
+      <div class="text-xs text-tertiary" style="margin:10px 0 6px;font-weight: 500;text-transform:uppercase;letter-spacing:0.06em;">Go to (within a client)</div>
+      <div class="help-row"><span>Overview</span><span><span class="kbd">g</span> <span class="kbd">o</span></span></div>
+      <div class="help-row"><span>Readiness</span><span><span class="kbd">g</span> <span class="kbd">e</span></span></div>
+      <div class="help-row"><span>Controls</span><span><span class="kbd">g</span> <span class="kbd">c</span></span></div>
+      <div class="help-row"><span>Assets</span><span><span class="kbd">g</span> <span class="kbd">a</span></span></div>
+      <div class="help-row"><span>Risks</span><span><span class="kbd">g</span> <span class="kbd">r</span></span></div>
+      <div class="help-row"><span>SoA</span><span><span class="kbd">g</span> <span class="kbd">s</span></span></div>
+      <div class="help-row"><span>Documents</span><span><span class="kbd">g</span> <span class="kbd">d</span></span></div>
+      <div class="help-row"><span>Internal audits</span><span><span class="kbd">g</span> <span class="kbd">i</span></span></div>
+      <div class="help-row"><span>Management review</span><span><span class="kbd">g</span> <span class="kbd">m</span></span></div>
+      <div class="help-row"><span>Nonconformities</span><span><span class="kbd">g</span> <span class="kbd">n</span></span></div>
+      <div class="help-row"><span>Tasks</span><span><span class="kbd">g</span> <span class="kbd">t</span></span></div>
+      <% } %>
+      <div class="help-faq" aria-label="Frequently asked questions">
+        <div class="text-xs text-tertiary help-faq-label">Frequently asked questions</div>
+        <details><summary>How do I find a page quickly?</summary><p>Use Search or press Command K on macOS and Control K on Windows. Search shows only pages available in your engagement.</p></details>
+        <details><summary>Why is a submit button unavailable?</summary><p>Required fields or supporting evidence are still missing. Complete the highlighted fields before submitting.</p></details>
+        <details><summary>Who can see uploaded evidence?</summary><p>Only authorised members of this client workspace and its assigned engagement team can access uploaded evidence.</p></details>
+        <details><summary>How do I contact the engagement team?</summary><p>Use the Contact team button in the client portal or open Portal help for guidance.</p></details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<div id="appConfirmModal" class="app-confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="appConfirmKind" aria-describedby="appConfirmBody" aria-hidden="true" hidden style="position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1100;align-items:center;justify-content:center;">
+  <div class="app-confirm-sheet" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;width:440px;max-width:92vw;box-shadow:0 24px 48px rgba(0,0,0,0.25);overflow:hidden;">
+    <div id="appConfirmHead" style="padding:14px 18px;border-bottom:1px solid var(--border);">
+      <div class="text-xs text-tertiary" id="appConfirmKind" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.05em;">Confirm</div>
+      <div id="appConfirmTitle" style="font-size:15px;font-weight: 500;margin-top:4px;display:none;"></div>
+    </div>
+    <div class="text-lg" id="appConfirmBody" style="padding:16px 18px;line-height:1.55;"></div>
+    <div class="app-confirm-actions" style="padding:12px 18px;border-top:1px solid var(--border);background:var(--bg-subtle);display:flex;justify-content:flex-end;gap:8px;">
+      <button type="button" id="appConfirmCancel" class="btn btn-ghost btn-xs">Cancel</button>
+      <button type="button" id="appConfirmOk" class="btn btn-primary btn-xs">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window._markBusy = function (form, label) {
+  if (!form || form._isBusy) return false;
+  form._isBusy = true;
+  const buttons = form.querySelectorAll('button[type="submit"], button:not([type])');
+  buttons.forEach(b => {
+    b.dataset._originalText = b.textContent;
+    if (label) b.textContent = label;
+    b.disabled = true;
+    b.style.cursor = 'wait';
+    b.style.opacity = '0.85';
+  });
+  return true;
+};
+window._unmarkBusy = function (form) {
+  if (!form) return;
+  form._isBusy = false;
+  form.querySelectorAll('button[disabled]').forEach(b => {
+    if (b.dataset._originalText) b.textContent = b.dataset._originalText;
+    b.disabled = false;
+    b.style.cursor = '';
+    b.style.opacity = '';
+  });
+};
+
+(function () {
+  if (!window.fetch || !window.history || !window.history.pushState) return;
+  const APP_SELECTOR = '.app';
+
+  function shouldIntercept(link, e) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+    if (link.target && link.target !== '' && link.target !== '_self') return false;
+    if (link.hasAttribute('download')) return false;
+    if (link.dataset.noSpa === '1') return false;
+    const href = link.getAttribute('href');
+    if (!href || !href.startsWith('/')) return false;
+    const target = new URL(href, location.href);
+    if (target.pathname === location.pathname && target.search === location.search && target.hash) return false;
+    if (href === location.pathname + location.search) return false;
+    if (/\.(csv|docx|zip|pdf|xlsx|png|jpg|svg|ico)(\?|#|$)/i.test(href)) return false;
+    if (href.startsWith('/api/') || href.startsWith('/vendor/')) return false;
+    return true;
+  }
+
+  function updateSidebarActive(href) {
+    const target = new URL(href || location.href, location.href);
+    const path = target.pathname;
+    const portalRoot = /^\/workspaces\/\d+\/client-portal\/?$/.test(path);
+    document.querySelectorAll('.sidebar a.nav-item').forEach(a => {
+      const linkUrl = new URL(a.getAttribute('href') || '/', location.href);
+      const isActive = portalRoot && linkUrl.pathname === path
+        ? (linkUrl.searchParams.get('view') || 'home') === (target.searchParams.get('view') || 'home')
+        : (!linkUrl.hash && path === linkUrl.pathname);
+      a.classList.toggle('active', isActive);
+      if (isActive) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
+  }
+
+  function syncSidebarNavigationState(liveSidebar, incomingSidebar) {
+    if (!liveSidebar || !incomingSidebar) return;
+
+    const incomingLinks = new Map();
+    incomingSidebar.querySelectorAll('a.nav-item, a.nav-subitem').forEach(link => {
+      incomingLinks.set(link.getAttribute('href') || '', link);
+    });
+    liveSidebar.querySelectorAll('a.nav-item, a.nav-subitem').forEach(link => {
+      const incoming = incomingLinks.get(link.getAttribute('href') || '');
+      const active = !!incoming && incoming.classList.contains('active');
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+
+    const incomingDomains = new Map();
+    incomingSidebar.querySelectorAll('details.nav-domain').forEach(domain => {
+      const label = domain.querySelector(':scope > summary')?.getAttribute('aria-label') || '';
+      if (label) incomingDomains.set(label, domain);
+    });
+    liveSidebar.querySelectorAll('details.nav-domain').forEach(domain => {
+      const label = domain.querySelector(':scope > summary')?.getAttribute('aria-label') || '';
+      const incoming = incomingDomains.get(label);
+      const active = !!incoming && incoming.classList.contains('is-active');
+      domain.classList.toggle('is-active', active);
+      if (incoming) domain.open = incoming.open;
+    });
+  }
+
+  let portalScrollMain = null;
+  let portalScrollHandler = null;
+  let portalRequestedHash = '';
+  let portalScrollSettleTimer = null;
+  function scrollToTargetHash(hash, behavior) {
+    if (!hash) return false;
+    const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+    if (!target) return false;
+    const main = document.querySelector('.main');
+    if (!main) return false;
+
+    if (target.matches('details.cp-gap-stage')) {
+      document.querySelectorAll('details.cp-gap-stage').forEach(stage => {
+        stage.open = stage === target;
+      });
+    } else {
+      const parentDisclosure = target.closest('details');
+      if (parentDisclosure) parentDisclosure.open = true;
+    }
+
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    const mainRect = main.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const destination = Math.max(0, main.scrollTop + targetRect.top - mainRect.top - 18);
+    if (behavior === 'smooth') {
+      portalRequestedHash = hash;
+      clearTimeout(portalScrollSettleTimer);
+      const finish = () => {
+        if (portalRequestedHash !== hash) return;
+        portalRequestedHash = '';
+        clearTimeout(portalScrollSettleTimer);
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+        updateSidebarActive(location.pathname + location.search + hash);
+      };
+      main.addEventListener('scrollend', finish, { once: true });
+      portalScrollSettleTimer = setTimeout(finish, 900);
+      main.scrollTo({ top: destination, behavior: 'smooth' });
+    } else {
+      portalRequestedHash = '';
+      clearTimeout(portalScrollSettleTimer);
+      const previousBehavior = main.style.scrollBehavior;
+      main.style.scrollBehavior = 'auto';
+      main.scrollTop = destination;
+      requestAnimationFrame(() => { main.style.scrollBehavior = previousBehavior; });
+    }
+    return true;
+  }
+
+  function sameDocumentHashTarget(link, e) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null;
+    if (link.target && link.target !== '' && link.target !== '_self') return null;
+    if (link.hasAttribute('download') || link.dataset.noSpa === '1') return null;
+    const href = link.getAttribute('href');
+    if (!href) return null;
+    const target = new URL(href, location.href);
+    if (target.origin !== location.origin || !target.hash) return null;
+    return target.pathname === location.pathname && target.search === location.search ? target : null;
+  }
+  function bindPortalScrollSpy() {
+    if (portalScrollMain && portalScrollHandler) portalScrollMain.removeEventListener('scroll', portalScrollHandler);
+    portalScrollMain = document.querySelector('.main');
+    portalScrollHandler = null;
+    const portalLink = document.querySelector('.sidebar a.nav-item[href*="/client-portal#"]');
+    if (!portalScrollMain || !portalLink || !/^\/workspaces\/\d+\/client-portal\/?$/.test(location.pathname)) return;
+    const sectionIds = ['engagement', 'requests', 'approvals', 'reports', 'team-help'];
+    const sections = sectionIds.map(id => document.getElementById(id)).filter(Boolean);
+    let queued = false;
+    portalScrollHandler = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        if (portalRequestedHash) {
+          updateSidebarActive(location.pathname + location.search + portalRequestedHash);
+          return;
+        }
+        const mainTop = portalScrollMain.getBoundingClientRect().top;
+        let activeHash = '';
+        if (portalScrollMain.scrollTop > 48) {
+          const atBottom = portalScrollMain.scrollTop >= portalScrollMain.scrollHeight - portalScrollMain.clientHeight - 2;
+          if (atBottom && sections.length) {
+            activeHash = `#${sections[sections.length - 1].id}`;
+          } else {
+            for (const section of sections) {
+              if (section.getBoundingClientRect().top <= mainTop + 96) activeHash = `#${section.id}`;
+            }
+          }
+        }
+        const next = location.pathname + location.search + activeHash;
+        if (location.hash !== activeHash) history.replaceState(history.state, '', next);
+        updateSidebarActive(next);
+      });
+    };
+    portalScrollMain.addEventListener('scroll', portalScrollHandler, { passive: true });
+    updateSidebarActive(location.href);
+  }
+
+  function sidebarStructureKey(sidebar) {
+    if (!sidebar) return '';
+    const first = sidebar.querySelector('.nav-item');
+    return first ? first.getAttribute('href') || '' : '';
+  }
+
+  function swapApp(html, targetHref) {
+    const parser = new DOMParser();
+    const newDoc = parser.parseFromString(html, 'text/html');
+    const newApp = newDoc.querySelector(APP_SELECTOR);
+    const oldApp = document.querySelector(APP_SELECTOR);
+    if (!newApp || !oldApp) return false;
+    const newTitle = newDoc.querySelector('title');
+    if (newTitle) document.title = newTitle.textContent;
+    const newCsrf = newDoc.querySelector('meta[name="csrf-token"]');
+    const curCsrf = document.querySelector('meta[name="csrf-token"]');
+    if (newCsrf && curCsrf) {
+      const nextToken = newCsrf.getAttribute('content') || '';
+      curCsrf.setAttribute('content', nextToken);
+      window._csrfToken = nextToken;
+    }
+
+    const oldSidebar = oldApp.querySelector('.sidebar');
+    const newSidebar = newApp.querySelector('.sidebar');
+    const sidebarChanged = sidebarStructureKey(oldSidebar) !== sidebarStructureKey(newSidebar);
+
+    if (sidebarChanged) {
+      oldApp.replaceWith(newApp);
+    } else {
+      syncSidebarNavigationState(oldSidebar, newSidebar);
+      const oldMain = oldApp.querySelector('.main');
+      const newMain = newApp.querySelector('.main');
+      if (oldMain && newMain) {
+        oldMain.replaceWith(newMain);
+      } else {
+        oldApp.replaceWith(newApp);
+      }
+    }
+
+    if (typeof syncMobileSidebar === 'function') syncMobileSidebar();
+
+    document.querySelectorAll('.main script').forEach(old => {
+      const s = document.createElement('script');
+      for (const a of old.attributes) s.setAttribute(a.name, a.value);
+      s.text = old.text;
+      old.replaceWith(s);
+    });
+    if (typeof window._csrfStamp === 'function') {
+      document.querySelectorAll('form').forEach(window._csrfStamp);
+    }
+    const liveMain = document.querySelector('.main');
+    attachHoverPrefetch();
+    bindPortalScrollSpy();
+    requestAnimationFrame(() => {
+      const target = new URL(targetHref || location.href, location.href);
+      if (!scrollToTargetHash(target.hash) && liveMain) liveMain.scrollTop = 0;
+      updateSidebarActive(target.href);
+      window.WorkNavigation?.mount(target.href);
+    });
+    return true;
+  }
+
+  const prefetchCache = new Map();
+  const PREFETCH_TTL_MS = 30000;
+  const PREFETCH_MAX = 12;
+
+  function prefetchKey(href) { return href; }
+  function getPrefetched(href) {
+    const k = prefetchKey(href);
+    const e = prefetchCache.get(k);
+    if (!e) return null;
+    if (Date.now() - e.t > PREFETCH_TTL_MS) { prefetchCache.delete(k); return null; }
+    return e.p;
+  }
+  function prefetch(href) {
+    const k = prefetchKey(href);
+    if (prefetchCache.has(k)) return;
+    if (prefetchCache.size >= PREFETCH_MAX) {
+      const first = prefetchCache.keys().next().value;
+      if (first) prefetchCache.delete(first);
+    }
+    const p = fetch(href, { headers: { 'X-Spa-Nav': '1', 'X-Spa-Prefetch': '1' }, credentials: 'same-origin' })
+      .then(r => (r.ok && r.headers.get('content-type')?.includes('html')) ? r.text() : null)
+      .catch(() => null);
+    prefetchCache.set(k, { p, t: Date.now() });
+  }
+
+  let inflight = null;
+  let renderedPath = location.pathname + location.search;
+  async function navigate(href, push) {
+    if (inflight) inflight.abort();
+    const ctl = new AbortController();
+    inflight = ctl;
+    let leavingDocument = false;
+    progress.start();
+    try {
+      const cached = getPrefetched(href);
+      let text = cached ? await cached : null;
+      if (!text) {
+        const res = await fetch(href, { signal: ctl.signal, headers: { 'X-Spa-Nav': '1' }, credentials: 'same-origin' });
+        if (!res.ok || !res.headers.get('content-type')?.includes('html')) {
+          leavingDocument = true;
+          window.location.href = href; return;
+        }
+        text = await res.text();
+      }
+      window.WorkNavigation?.capture(renderedPath);
+      if (push) window.history.pushState({}, '', href);
+      const ok = swapApp(text, href);
+      if (!ok) { leavingDocument = true; window.location.href = href; return; }
+      const renderedUrl = new URL(href, location.href);
+      renderedPath = renderedUrl.pathname + renderedUrl.search;
+      prefetchCache.delete(prefetchKey(href));
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      leavingDocument = true;
+      window.location.href = href;
+    } finally {
+      if (inflight === ctl) {
+        inflight = null;
+        if (!leavingDocument) progress.done();
+      }
+    }
+  }
+
+  const progress = (function () {
+    const bar = document.createElement('div');
+    bar.id = '__spa_progress';
+    bar.style.cssText = 'position:fixed;top:0;left:0;height:2px;width:0;background:var(--accent);z-index:9999;transition:width 0.2s ease, opacity 0.25s ease;pointer-events:none;opacity:0;';
+    if (document.body) document.body.appendChild(bar);
+    else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(bar));
+    let timer = null;
+    return {
+      start() {
+        window.AppPageLoader?.show('Opening workspace');
+        bar.style.opacity = '1';
+        bar.style.width = '12%';
+        clearTimeout(timer);
+        let w = 12;
+        timer = setInterval(() => { w = Math.min(80, w + (90 - w) * 0.10); bar.style.width = w + '%'; }, 220);
+      },
+      done() {
+        clearTimeout(timer); timer = null;
+        bar.style.width = '100%';
+        setTimeout(() => { bar.style.opacity = '0'; bar.style.width = '0'; }, 180);
+        window.AppPageLoader?.hide();
+      },
+    };
+  })();
+
+  function attachHoverPrefetch() {
+    document.querySelectorAll('a[href^="/"]').forEach(link => {
+      if (link.dataset.prefetchBound) return;
+      link.dataset.prefetchBound = '1';
+      const onHover = () => {
+        const fakeEvt = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false };
+        if (!shouldIntercept(link, fakeEvt)) return;
+        const href = link.getAttribute('href');
+        if (href === location.pathname + location.search) return;
+        prefetch(href);
+      };
+      link.addEventListener('mouseenter', onHover, { passive: true });
+      link.addEventListener('focus', onHover, { passive: true });
+    });
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    attachHoverPrefetch();
+    bindPortalScrollSpy();
+    updateSidebarActive(location.href);
+    if (location.hash) requestAnimationFrame(() => scrollToTargetHash(location.hash));
+  });
+
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest && e.target.closest('a');
+    if (!link) return;
+    const hashTarget = sameDocumentHashTarget(link, e);
+    if (hashTarget) {
+      e.preventDefault();
+      if (hashTarget.href !== location.href) history.pushState(history.state, '', hashTarget.href);
+      scrollToTargetHash(hashTarget.hash, 'smooth');
+      updateSidebarActive(hashTarget.href);
+      return;
+    }
+    if (!shouldIntercept(link, e)) return;
+    e.preventDefault();
+    navigate(link.getAttribute('href'), true);
+  });
+
+  window.addEventListener('hashchange', () => {
+    updateSidebarActive(location.href);
+    scrollToTargetHash(location.hash);
+  });
+
+  window.addEventListener('popstate', () => {
+    const nextPath = location.pathname + location.search;
+    if (nextPath === renderedPath) {
+      updateSidebarActive(location.href);
+      if (location.hash) scrollToTargetHash(location.hash);
+      else if (document.querySelector('.main')) document.querySelector('.main').scrollTop = 0;
+      return;
+    }
+    navigate(nextPath + location.hash, false);
+  });
+})();
+
+(function() {
+  const saved = localStorage.getItem('isms-theme');
+  if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? null : 'dark';
+  if (next) document.documentElement.setAttribute('data-theme', next);
+  else document.documentElement.removeAttribute('data-theme');
+  localStorage.setItem('isms-theme', next || 'light');
+}
+
+let sidebarReturnFocus = null;
+const mobileSidebarMedia = window.matchMedia('(max-width: 960px)');
+
+function sidebarFocusableItems(sidebar) {
+  return Array.from(sidebar.querySelectorAll(
+    'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter(el => !el.hidden && el.getClientRects().length > 0);
+}
+
+function syncMobileSidebar() {
+  const app = document.getElementById('app');
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const menuButton = document.getElementById('mobileMenuButton');
+  if (!sidebar) return;
+
+  const mobile = mobileSidebarMedia.matches;
+  const open = mobile && sidebar.classList.contains('open');
+  sidebar.toggleAttribute('inert', mobile && !open);
+  sidebar.setAttribute('aria-hidden', mobile && !open ? 'true' : 'false');
+  if (mobile) {
+    sidebar.setAttribute('role', 'dialog');
+    sidebar.setAttribute('aria-modal', 'true');
+  } else {
+    sidebar.removeAttribute('role');
+    sidebar.removeAttribute('aria-modal');
+  }
+  if (backdrop) backdrop.classList.toggle('open', open);
+  if (menuButton) menuButton.setAttribute('aria-expanded', String(open));
+  app?.classList.toggle('drawer-open', open);
+}
+
+function toggleSidebar(open) {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+
+  const shouldOpen = Boolean(open) && mobileSidebarMedia.matches;
+  if (shouldOpen && !sidebar.classList.contains('open')) {
+    sidebarReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+  sidebar.classList.toggle('open', shouldOpen);
+  syncMobileSidebar();
+
+  if (shouldOpen) {
+    const closeButton = sidebar.querySelector('.sidebar-mobile-close');
+    window.requestAnimationFrame(() => closeButton?.focus({ preventScroll: true }));
+  } else if (sidebarReturnFocus?.isConnected) {
+    sidebarReturnFocus.focus({ preventScroll: true });
+    sidebarReturnFocus = null;
+  }
+}
+
+(function() {
+  if (localStorage.getItem('isms-sidebar') === 'collapsed') {
+    document.getElementById('app')?.classList.add('sidebar-collapsed');
+  }
+  syncSidebarCollapseButton();
+  syncMobileSidebar();
+
+  const handleSidebarBreakpoint = () => {
+    document.getElementById('sidebar')?.classList.remove('open');
+    sidebarReturnFocus = null;
+    syncMobileSidebar();
+  };
+  if (mobileSidebarMedia.addEventListener) mobileSidebarMedia.addEventListener('change', handleSidebarBreakpoint);
+  else mobileSidebarMedia.addListener(handleSidebarBreakpoint);
+
+  document.addEventListener('click', event => {
+    if (!mobileSidebarMedia.matches || !event.target.closest('#sidebar a[href]')) return;
+    toggleSidebar(false);
+  });
+
+  document.addEventListener('keydown', event => {
+    const sidebar = document.getElementById('sidebar');
+    if (!mobileSidebarMedia.matches || !sidebar?.classList.contains('open')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      toggleSidebar(false);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const items = sidebarFocusableItems(sidebar);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+})();
+function syncSidebarCollapseButton() {
+  const app = document.getElementById('app');
+  const button = document.getElementById('sidebarCollapseButton');
+  if (!app || !button) return;
+  const collapsed = app.classList.contains('sidebar-collapsed');
+  const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  button.classList.toggle('is-collapsed', collapsed);
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-pressed', String(collapsed));
+  button.title = label;
+}
+function toggleSidebarCollapse() {
+  const app = document.getElementById('app');
+  if (!app) return;
+  app.classList.toggle('sidebar-collapsed');
+  localStorage.setItem('isms-sidebar', app.classList.contains('sidebar-collapsed') ? 'collapsed' : 'open');
+  syncSidebarCollapseButton();
+}
+
+(function () {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  window._csrfToken = meta ? meta.getAttribute('content') : '';
+
+  function stripTokenFromAction(form) {
+    const action = form.getAttribute('action');
+    if (!action || !/[?&]_csrf=/.test(action)) return;
+    try {
+      const parsed = new URL(action, window.location.href);
+      parsed.searchParams.delete('_csrf');
+      const sameOrigin = parsed.origin === window.location.origin;
+      form.setAttribute('action', sameOrigin ? parsed.pathname + parsed.search + parsed.hash : parsed.href);
+    } catch (_) {
+    }
+  }
+
+  function stampForm(form) {
+    if (!form) return;
+    const method = String(form.getAttribute('method') || 'GET').toUpperCase();
+    const safe = method === 'GET' || method === 'HEAD';
+    const inputs = form.querySelectorAll('input[name="_csrf"]');
+
+    if (safe) {
+      inputs.forEach(inp => inp.remove());
+      stripTokenFromAction(form);
+      return;
+    }
+
+    const token = window._csrfToken || '';
+    if (!token) return;
+    let inp = inputs[0];
+    if (!inp) {
+      inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = '_csrf';
+      form.appendChild(inp);
+    }
+    inp.value = token;
+    Array.from(inputs).slice(1).forEach(extra => extra.remove());
+    stripTokenFromAction(form);
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('form').forEach(stampForm);
+  });
+  document.addEventListener('submit', e => stampForm(e.target), true);
+window._csrfStamp = stampForm;
+})();
+
+window._modalAccessibility = (function () {
+  const returnFocus = new WeakMap();
+  const focusableSelector = [
+    'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+    'select:not([disabled])', 'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(',');
+
+  function setShellInert(inert) {
+    const shell = document.getElementById('app');
+    if (!shell) return;
+    if (inert) {
+      shell.setAttribute('inert', '');
+      shell.setAttribute('aria-hidden', 'true');
+    } else {
+      shell.removeAttribute('inert');
+      shell.removeAttribute('aria-hidden');
+    }
+  }
+
+  function activate(modal, initialFocus) {
+    if (!modal) return;
+    const opener = document.activeElement;
+    if (opener && opener !== document.body) returnFocus.set(modal, opener);
+    modal.hidden = false;
+    modal.removeAttribute('aria-hidden');
+    const target = initialFocus || modal.querySelector(focusableSelector) || modal;
+    if (target && typeof target.focus === 'function') target.focus();
+    setShellInert(true);
+  }
+
+  function deactivate(modal) {
+    if (!modal) return;
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+    if (!document.querySelector('[role="dialog"]:not([hidden])')) setShellInert(false);
+    const opener = returnFocus.get(modal);
+    returnFocus.delete(modal);
+    if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+  }
+
+  function trap(modal, event) {
+    if (!modal || modal.hidden || event.key !== 'Tab') return;
+    const items = Array.from(modal.querySelectorAll(focusableSelector))
+      .filter(item => item.getClientRects().length && item.getAttribute('aria-hidden') !== 'true');
+    if (!items.length) {
+      event.preventDefault();
+      modal.focus();
+      return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
+  }
+
+  return { activate, deactivate, trap };
+})();
+
+(function () {
+  const modal = document.getElementById('appConfirmModal');
+  if (!modal) return;
+  const head = document.getElementById('appConfirmHead');
+  const kindEl = document.getElementById('appConfirmKind');
+  const titleEl = document.getElementById('appConfirmTitle');
+  const bodyEl = document.getElementById('appConfirmBody');
+  const okBtn = document.getElementById('appConfirmOk');
+  const cancelBtn = document.getElementById('appConfirmCancel');
+  let resolver = null;
+  let isAlert = false;
+
+  function close(result) {
+    modal.style.display = 'none';
+    window._modalAccessibility.deactivate(modal);
+    const r = resolver; resolver = null;
+    if (r) r(result);
+  }
+  function show(message, opts) {
+    opts = opts || {};
+    const danger = !!opts.danger;
+    isAlert = !!opts.alert;
+    kindEl.textContent = (opts.kind || (isAlert ? 'Notice' : (danger ? 'Confirm delete' : 'Confirm'))).toUpperCase();
+    kindEl.style.color = danger ? 'var(--danger,#b91c1c)' : 'var(--text-tertiary)';
+    head.style.background = danger ? 'rgba(185,28,28,0.06)' : '';
+    if (opts.title) { titleEl.textContent = opts.title; titleEl.style.display = ''; }
+    else { titleEl.style.display = 'none'; }
+    bodyEl.textContent = message || '';
+    okBtn.textContent = opts.okLabel || (isAlert ? 'OK' : (danger ? 'Delete' : 'Confirm'));
+    okBtn.className = 'btn btn-xs ' + (danger ? '' : 'btn-primary');
+    if (danger) {
+      okBtn.style.background = 'var(--danger,#b91c1c)';
+      okBtn.style.color = '#fff';
+      okBtn.style.borderColor = 'var(--danger,#b91c1c)';
+    } else {
+      okBtn.style.background = ''; okBtn.style.color = ''; okBtn.style.borderColor = '';
+    }
+    cancelBtn.style.display = isAlert ? 'none' : '';
+    modal.style.display = 'flex';
+    window._modalAccessibility.activate(modal, okBtn);
+    return new Promise(res => { resolver = res; });
+  }
+
+  okBtn.addEventListener('click', () => close(true));
+  cancelBtn.addEventListener('click', () => close(false));
+  modal.addEventListener('click', e => { if (e.target === modal) close(false); });
+  modal.addEventListener('keydown', e => window._modalAccessibility.trap(modal, e));
+  document.addEventListener('keydown', e => {
+    if (modal.hidden || modal.style.display !== 'flex') return;
+    if (e.key === 'Escape') { e.preventDefault(); close(false); }
+    else if (e.key === 'Enter') { e.preventDefault(); close(true); }
+  });
+
+  window.appConfirm = (message, opts) => show(message, opts || {});
+  window.appAlert = (message, opts) => show(message, Object.assign({ alert: true }, opts || {}));
+
+  window.appConfirmForm = function (event, message, opts) {
+    const form = event.currentTarget || event.target;
+    if (form && form._appConfirmed) return true;
+    if (event.preventDefault) event.preventDefault();
+    show(message, Object.assign({ danger: true }, opts || {})).then(ok => {
+      if (ok && form) {
+        form._appConfirmed = true;
+        if (typeof window._csrfStamp === 'function') window._csrfStamp(form);
+        window.AppPageLoader?.show('Saving changes');
+        HTMLFormElement.prototype.submit.call(form);
+      }
+    });
+    return false;
+  };
+
+  window.appConfirmClick = function (event, message, opts) {
+    const btn = event.currentTarget || event.target;
+    if (btn && btn._appConfirmed) return true;
+    if (event.preventDefault) event.preventDefault();
+    show(message, Object.assign({ danger: true }, opts || {})).then(ok => {
+      if (ok && btn) {
+        btn._appConfirmed = true;
+        btn.click();
+      }
+    });
+    return false;
+  };
+})();
+
+function toast(msg, kind) {
+  const stack = document.getElementById('toastStack');
+  if (!stack) return;
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || 'success');
+  t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => { t.classList.add('leaving'); setTimeout(() => t.remove(), 200); }, 2800);
+}
+(function() {
+  const p = new URLSearchParams(location.search);
+  const key = p.has('toast') ? 'toast' : (p.has('notice') ? 'notice' : (p.has('error') ? 'error' : ''));
+  if (key) {
+    const msg = decodeURIComponent(p.get(key));
+    const kind = p.get('toastKind') || (key === 'error' ? 'error' : 'success');
+    setTimeout(() => toast(msg, kind), 50);
+    p.delete(key); p.delete('toastKind');
+    const newUrl = location.pathname + (p.toString() ? '?' + p.toString() : '');
+    history.replaceState({}, '', newUrl);
+  }
+})();
+
+const clientFooterMode = <%- jsonForScript(clientFooterMode) %>;
+const wsIdMatch = location.pathname.match(/\/workspaces\/(\d+)/);
+const wsIdParam = wsIdMatch ? wsIdMatch[1] : '';
+let cpResults = [];
+let cpSelected = 0;
+let cpDebounce;
+
+function openPalette() {
+  const palette = document.getElementById('cpBackdrop');
+  if (!palette) return;
+  palette.classList.add('open');
+  if (palette.hidden) window._modalAccessibility.activate(palette, document.getElementById('cpInput'));
+  document.querySelectorAll('[aria-controls="cpBackdrop"]').forEach(trigger => trigger.setAttribute('aria-expanded', 'true'));
+  cpSearch('');
+}
+function closePalette() {
+  const palette = document.getElementById('cpBackdrop');
+  if (!palette || palette.hidden) return;
+  palette.classList.remove('open');
+  window._modalAccessibility.deactivate(palette);
+  document.querySelectorAll('[aria-controls="cpBackdrop"]').forEach(trigger => trigger.setAttribute('aria-expanded', 'false'));
+  if (document.getElementById('cpInput')) document.getElementById('cpInput').value = '';
+}
+async function cpSearch(q) {
+  const box = document.getElementById('cpResults');
+  if (!q || !q.trim()) {
+    box.innerHTML = '<div class="cp-empty">' + (clientFooterMode ? 'Type to search this engagement' : 'Type to search controls, risks and documents') + '</div>';
+    cpResults = []; return;
+  }
+  try {
+    const currentWsMatch = location.pathname.match(/\/workspaces\/(\d+)/);
+    const currentWsId = currentWsMatch ? currentWsMatch[1] : wsIdParam;
+    const url = '/api/search?q=' + encodeURIComponent(q) + (currentWsId ? '&wsId=' + currentWsId : '') + (clientFooterMode ? '&clientMode=1' : '');
+    const r = await fetch(url);
+    const data = await r.json();
+    cpResults = data;
+    cpSelected = 0;
+    renderCp();
+  } catch (e) {
+    box.innerHTML = '<div class="cp-empty">Search failed.</div>';
+  }
+}
+function renderCp() {
+  const box = document.getElementById('cpResults');
+  if (!cpResults.length) { box.innerHTML = '<div class="cp-empty">No matches</div>'; return; }
+  box.innerHTML = cpResults.map((r, i) => `
+    <a href="${r.href}" class="cp-result${i === cpSelected ? ' selected' : ''}" data-idx="${i}">
+      <span class="cp-type">${r.type}</span>
+      <span class="cp-label">${escapeHtml(r.label)}</span>
+      ${r.sublabel ? '<span class="cp-sub">' + escapeHtml(r.sublabel) + '</span>' : ''}
+    </a>
+  `).join('');
+  box.querySelectorAll('.cp-result').forEach(el => {
+    el.addEventListener('mouseenter', () => { cpSelected = parseInt(el.dataset.idx, 10); renderCp(); });
+  });
+}
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('cpInput')?.addEventListener('input', e => {
+  clearTimeout(cpDebounce);
+  cpDebounce = setTimeout(() => cpSearch(e.target.value), 120);
+});
+document.getElementById('cpInput')?.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); cpSelected = Math.min(cpSelected+1, cpResults.length-1); renderCp(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); cpSelected = Math.max(cpSelected-1, 0); renderCp(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (cpResults[cpSelected]) location.href = cpResults[cpSelected].href; }
+  else if (e.key === 'Escape') { closePalette(); }
+});
+document.getElementById('cpBackdrop')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); closePalette(); return; }
+  window._modalAccessibility.trap(document.getElementById('cpBackdrop'), e);
+});
+
+function openHelp() {
+  const help = document.getElementById('helpBackdrop');
+  if (!help) return;
+  help.classList.add('open');
+  if (help.hidden) window._modalAccessibility.activate(help, help.querySelector('button[aria-label="Close help"]'));
+  document.querySelectorAll('[aria-controls="helpBackdrop"]').forEach(trigger => trigger.setAttribute('aria-expanded', 'true'));
+}
+function closeHelp() {
+  const help = document.getElementById('helpBackdrop');
+  if (!help || help.hidden) return;
+  help.classList.remove('open');
+  window._modalAccessibility.deactivate(help);
+  document.querySelectorAll('[aria-controls="helpBackdrop"]').forEach(trigger => trigger.setAttribute('aria-expanded', 'false'));
+}
+document.getElementById('helpBackdrop')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); closeHelp(); return; }
+  window._modalAccessibility.trap(document.getElementById('helpBackdrop'), e);
+});
+
+const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+if (!isMac) {
+  document.getElementById('kbdHint') && (document.getElementById('kbdHint').textContent = 'Ctrl K');
+  document.getElementById('hk1') && (document.getElementById('hk1').textContent = 'Ctrl K');
+  document.getElementById('hk2') && (document.getElementById('hk2').textContent = 'Ctrl ⇧L');
+}
+
+let gPressed = false; let gTimer;
+function inEditable(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); return; }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') { e.preventDefault(); toggleTheme(); return; }
+  if (e.key === 'Escape') {
+    if (document.getElementById('cpBackdrop')?.classList.contains('open')) closePalette();
+    else if (document.getElementById('helpBackdrop')?.classList.contains('open')) closeHelp();
+    return;
+  }
+  if (inEditable(e.target)) return;
+  if (e.key === '/') { e.preventDefault(); openPalette(); return; }
+  if (e.key === '?') { e.preventDefault(); openHelp(); return; }
+  if (!clientFooterMode && e.key === 'g') {
+    gPressed = true;
+    clearTimeout(gTimer);
+    gTimer = setTimeout(() => { gPressed = false; }, 1000);
+    return;
+  }
+  if (!clientFooterMode && gPressed) {
+    gPressed = false;
+    const target = document.querySelector(`[data-shortcut="g ${e.key}"]`);
+    if (target) { e.preventDefault(); location.href = target.getAttribute('href'); }
+  }
+});
+</script>
+<% } %>
+</body>
+</html>

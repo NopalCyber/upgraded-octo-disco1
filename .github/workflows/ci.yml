@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          POSTGRES_PASSWORD: ci-only-postgres-password
+          POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -h 127.0.0.1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+      PG_TEST_URL: postgres://postgres:ci-only-postgres-password@127.0.0.1:5432/postgres
+      PG_DUMP: /usr/lib/postgresql/16/bin/pg_dump
+      PG_RESTORE: /usr/lib/postgresql/16/bin/pg_restore
+      ISMS_DISABLE_JOBS: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the PostgreSQL 16 client (pg_dump, pg_restore)
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends postgresql-client-16
+          "$PG_DUMP" --version
+          "$PG_RESTORE" --version
+      - name: Install browser for PDF generation tests
+        run: npx --no-install puppeteer browsers install chrome-headless-shell
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Framework content staleness gate
+        run: npm run content-staleness
+      - run: npm test
+      - name: Upload test output on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: test-output
+          path: |
+            npm-debug.log
+          if-no-files-found: ignore
+
+  sast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep:1.136.0
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Static analysis (Semgrep)
+        run: >
+          semgrep scan --metrics=off --error
+          --config p/javascript --config p/nodejs --config p/expressjs
+          --config p/owasp-top-ten --config p/secrets
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build the production image
+        run: docker build --tag iso27001-tool:ci .
+      - name: Start PostgreSQL for the production image
+        run: |
+          docker network create nimbus-ci-net
+          docker run --detach --name nimbus-ci-db --network nimbus-ci-net \
+            --env POSTGRES_PASSWORD=ci-only-postgres-password \
+            --env POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8" \
+            postgres:16.4
+          for _ in $(seq 1 30); do
+            if docker exec nimbus-ci-db pg_isready -U postgres -h 127.0.0.1; then exit 0; fi
+            sleep 2
+          done
+          docker logs nimbus-ci-db
+          exit 1
+      - name: Start the production image
+        run: |
+          docker run --detach --name nimbus-ci --network nimbus-ci-net \
+            --publish 127.0.0.1:3300:3000 \
+            --env DATABASE_URL=postgres://postgres:ci-only-postgres-password@nimbus-ci-db:5432/postgres \
+            --env NODE_ENV=production \
+            --env PORT=3000 \
+            --env APP_VERSION="$GITHUB_SHA" \
+            --env APP_BASE_URL=https://ci.invalid \
+            --env RESEND_API_KEY=ci-placeholder-key \
+            --env SESSION_SECRET=ci-only-session-secret-0123456789abcdefghijklmnopqrstuvwxyz \
+            --env ISMS_MASTER_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff \
+            --env UPLOAD_AV_MODE=required \
+            iso27001-tool:ci
+      - name: Require production readiness
+        run: |
+          for _ in $(seq 1 60); do
+            if curl --silent --fail --max-time 5 http://127.0.0.1:3300/readyz > ready.json; then
+              grep -q "\"version\":\"$GITHUB_SHA\"" ready.json
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs nimbus-ci
+          exit 1
+      - name: Dynamic scan (OWASP ZAP baseline)
+        run: |
+          docker run --rm --network host --user root \
+            --volume "$PWD:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:2.17.0 \
+            zap-baseline.py -t http://127.0.0.1:3300 -c .zap/rules.tsv -I \
+              -r zap-baseline.html -J zap-baseline.json
+      - name: Verify graceful container stop
+        run: |
+          docker stop --time 20 nimbus-ci
+          test "$(docker inspect --format='{{.State.ExitCode}}' nimbus-ci)" = "0"
+      - name: Capture container output
+        if: always()
+        run: |
+          docker logs nimbus-ci > container-smoke.log 2>&1 || true
+          docker logs nimbus-ci-db > container-smoke-db.log 2>&1 || true
+      - name: Upload container output on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: container-smoke-output
+          path: |
+            container-smoke.log
+            container-smoke-db.log
+            ready.json
+          if-no-files-found: ignore
+      - name: Upload dynamic scan report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zap-baseline
+          path: |
+            zap-baseline.html
+            zap-baseline.json
+          if-no-files-found: ignore
+      - name: Remove smoke containers
+        if: always()
+        run: |
+          docker rm --force nimbus-ci nimbus-ci-db >/dev/null 2>&1 || true
+          docker network rm nimbus-ci-net >/dev/null 2>&1 || true

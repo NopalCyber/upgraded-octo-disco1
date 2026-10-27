@@ -1,0 +1,297 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { bootClient, openTestDb } = require('./helpers');
+const lifecycle = require('../lib/iso-lifecycle');
+
+let env;
+let client;
+let db;
+let firmId;
+let managerId;
+let gapWorkspaceId;
+let certificationWorkspaceId;
+let neutralWorkspaceId;
+
+test.before(async () => {
+  env = await bootClient();
+  client = env.client;
+  db = await openTestDb(env.dbUrl);
+  firmId = (await db.prepare('SELECT id FROM firms ORDER BY id LIMIT 1').get()).id;
+  managerId = (await db.prepare("SELECT id FROM users WHERE email='sec-test@example.com'").get()).id;
+});
+
+test.after(async () => {
+  if (db) await db.close();
+  if (client) await client.close();
+});
+
+test('new-client onboarding requires a plain-language contracted outcome', async () => {
+  const page = await client.get('/workspaces/new');
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Contracted ISO management-system outcome/);
+  assert.match(page.text, /Gap assessment only/);
+  assert.match(page.text, /Full certification support/);
+  assert.match(page.text, /issue the report, and close this engagement/);
+  assert.match(page.text, /Stage 1 and Stage 2 support/);
+  assert.match(page.text, /id="iso27001-outcome-fieldset"[^>]*hidden/);
+  assert.match(page.text, /choice\.required = hasIso/);
+
+  const before = (await db.prepare('SELECT COUNT(*) c FROM workspaces').get()).c;
+  const missing = await client.post('/workspaces', {
+    client_name: 'Missing Outcome Client',
+    frameworks: 'iso27001',
+  });
+  assert.equal(missing.status, 400);
+  assert.match(missing.text, /Choose whether this engagement ends/);
+  assert.match(missing.text, /name="engagement_outcome"[^>]*required/);
+  assert.equal((await db.prepare('SELECT COUNT(*) c FROM workspaces').get()).c, before);
+
+  const invalid = await client.post('/workspaces', {
+    client_name: 'Invalid Outcome Client',
+    frameworks: 'iso27001',
+    engagement_outcome: 'stage_1_only',
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal((await db.prepare('SELECT COUNT(*) c FROM workspaces').get()).c, before);
+});
+
+test('non-ISO and programme-neutral clients can be created without an ISO outcome or certification artefacts', async () => {
+  const tprmCreated = await client.post('/workspaces', {
+    client_name: 'Third-party Risk Lifecycle Client',
+    tprm_enabled: '1',
+    tprm_service_model: 'assessment_only',
+    target_cert_date: '2027-11-30',
+  });
+  assert.equal(tprmCreated.status, 302);
+  const tprmWorkspace = await db.prepare("SELECT * FROM workspaces WHERE client_name='Third-party Risk Lifecycle Client'").get();
+  assert.deepEqual(JSON.parse(tprmWorkspace.frameworks), []);
+  assert.equal(tprmWorkspace.target_cert_date, null);
+  assert.equal((await db.prepare('SELECT COUNT(*) c FROM engagement_delivery_plans WHERE workspace_id=?').get(tprmWorkspace.id)).c, 0);
+
+  const dashboard = await client.get('/dashboard?legacy=1');
+  assert.equal(dashboard.status, 200);
+  const tprmRow = (dashboard.text.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/g) || [])
+    .find(row => row.includes('Third-party Risk Lifecycle Client')) || '';
+  assert.ok(tprmRow, 'the non-ISO client should appear on the dashboard');
+  assert.doesNotMatch(tprmRow, /Gap assessment only|Full certification support/);
+
+  const neutralRefused = await client.post('/workspaces', { client_name: 'Programme Neutral Lifecycle Client' });
+  assert.equal(neutralRefused.status, 400, 'a client needs a programme');
+  await db.prepare(`INSERT INTO workspaces (firm_id, client_name, lead_consultant_id, frameworks) VALUES (?, 'Programme Neutral Lifecycle Client', ?, '[]')`)
+    .run(firmId, managerId);
+  const neutral = await db.prepare("SELECT * FROM workspaces WHERE client_name='Programme Neutral Lifecycle Client'").get();
+  neutralWorkspaceId = neutral.id;
+  assert.deepEqual(JSON.parse(neutral.frameworks), []);
+  const emptied = await client.post(`/workspaces/${neutral.id}/frameworks`, {});
+  assert.equal(emptied.status, 400, 'an edit cannot leave a client without any programme');
+  assert.match(emptied.text, /Choose at least one programme for this client/);
+  assert.deepEqual(JSON.parse((await db.prepare('SELECT frameworks FROM workspaces WHERE id=?').get(neutral.id)).frameworks), []);
+  assert.equal((await db.prepare('SELECT COUNT(*) c FROM engagement_delivery_plans WHERE workspace_id=?').get(neutral.id)).c, 0);
+});
+
+test('enabling ISO 27001 later requires an explicit outcome and creates the matching plan', async () => {
+  const setupPage = await client.get(`/workspaces/${neutralWorkspaceId}?skipSetupRedirect=1`);
+  assert.equal(setupPage.status, 200);
+  assert.match(setupPage.text, /Choose the contracted endpoint before ISO 27001 is enabled/);
+  assert.match(setupPage.text, /id="enable-iso27001-outcome"[^>]*hidden/);
+
+  const missing = await client.post(`/workspaces/${neutralWorkspaceId}/frameworks`, {
+    frameworks: 'iso27001',
+  });
+  assert.equal(missing.status, 400);
+  assert.match(missing.text, /Choose whether the ISO 27001 engagement ends/);
+  assert.deepEqual(JSON.parse((await db.prepare('SELECT frameworks FROM workspaces WHERE id=?').get(neutralWorkspaceId)).frameworks), []);
+  assert.equal((await db.prepare('SELECT COUNT(*) c FROM engagement_delivery_plans WHERE workspace_id=?').get(neutralWorkspaceId)).c, 0);
+
+  const enabled = await client.post(`/workspaces/${neutralWorkspaceId}/frameworks`, {
+    frameworks: 'iso27001',
+    engagement_outcome: 'gap_assessment_only',
+    target_cert_date: '2028-04-30',
+  });
+  assert.equal(enabled.status, 302);
+  const workspace = await db.prepare('SELECT * FROM workspaces WHERE id=?').get(neutralWorkspaceId);
+  assert.deepEqual(JSON.parse(workspace.frameworks), ['iso27001']);
+  assert.equal(workspace.engagement_outcome, 'gap_assessment_only');
+  assert.equal(workspace.target_cert_date, null);
+  const plan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(neutralWorkspaceId);
+  assert.ok(plan);
+  assert.equal(plan.name, 'ISO 27001 gap assessment delivery plan');
+  assert.equal(plan.target_completion_date, null);
+});
+
+test('gap-assessment-only onboarding seeds a report-only delivery plan', async () => {
+  const created = await client.post('/workspaces', {
+    client_name: 'Gap Only Client',
+    industry: 'Technology',
+    scope: 'Corporate ISMS scope',
+    target_cert_date: '2027-12-31',
+    frameworks: 'iso27001',
+    engagement_outcome: 'gap_assessment_only',
+  });
+  assert.equal(created.status, 302);
+  assert.match(created.location, /\/workspaces\/\d+\/intake/);
+
+  const workspace = await db.prepare("SELECT * FROM workspaces WHERE client_name='Gap Only Client'").get();
+  gapWorkspaceId = workspace.id;
+  assert.equal(workspace.engagement_outcome, 'gap_assessment_only');
+  assert.equal(workspace.target_cert_date, null, 'gap-only work must not inherit a certification deadline');
+  assert.equal((await db.prepare("SELECT COUNT(*) c FROM engagement_intake WHERE workspace_id=? AND question_id='cert-deadline'").get(workspace.id)).c, 0);
+
+  const plan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(workspace.id);
+  assert.equal(plan.name, 'ISO 27001 gap assessment delivery plan');
+  assert.match(plan.completion_criteria, /gap-assessment report is issued/);
+  assert.equal(plan.status, 'active');
+  assert.equal(plan.target_completion_date, null);
+});
+
+test('certification-support onboarding retains its target and certification-support plan', async () => {
+  const created = await client.post('/workspaces', {
+    client_name: 'Certification Client',
+    industry: 'Technology',
+    scope: 'Corporate ISMS scope',
+    target_cert_date: '2027-12-31',
+    frameworks: 'iso27001',
+    engagement_outcome: 'certification_support',
+  });
+  assert.equal(created.status, 302);
+
+  const workspace = await db.prepare("SELECT * FROM workspaces WHERE client_name='Certification Client'").get();
+  certificationWorkspaceId = workspace.id;
+  assert.equal(workspace.engagement_outcome, 'certification_support');
+  assert.equal(workspace.target_cert_date, '2027-12-31');
+  assert.equal((await db.prepare("SELECT answer FROM engagement_intake WHERE workspace_id=? AND question_id='cert-deadline'").get(workspace.id)).answer, '2027-12-31');
+  const plan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(workspace.id);
+  assert.equal(plan.name, 'ISO 27001 certification support delivery plan');
+  assert.equal(plan.target_completion_date, '2027-12-31');
+});
+
+test('gap-only can continue to certification support but cannot be shortened back', async () => {
+  let workspace = await db.prepare('SELECT * FROM workspaces WHERE id=?').get(gapWorkspaceId);
+  const gapPlan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(gapWorkspaceId);
+  await db.prepare("UPDATE engagement_delivery_plans SET status='completed' WHERE id=?").run(gapPlan.id);
+  const unconfirmed = await client.post(`/workspaces/${gapWorkspaceId}/update`, {
+    client_name: workspace.client_name,
+    industry: workspace.industry,
+    scope: workspace.scope,
+    engagement_outcome: 'certification_support',
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match(unconfirmed.text, /confirm the one-way change/i);
+  assert.equal((await db.prepare('SELECT engagement_outcome FROM workspaces WHERE id=?').get(gapWorkspaceId)).engagement_outcome, 'gap_assessment_only');
+  assert.equal((await db.prepare('SELECT status FROM engagement_delivery_plans WHERE id=?').get(gapPlan.id)).status, 'completed');
+
+  const converted = await client.post(`/workspaces/${gapWorkspaceId}/update`, {
+    client_name: workspace.client_name,
+    industry: workspace.industry,
+    scope: workspace.scope,
+    target_cert_date: '2028-03-31',
+    engagement_outcome: 'certification_support',
+    confirm_outcome_upgrade: '1',
+  });
+  assert.equal(converted.status, 302);
+  workspace = await db.prepare('SELECT * FROM workspaces WHERE id=?').get(gapWorkspaceId);
+  assert.equal(workspace.engagement_outcome, 'certification_support');
+  assert.equal(workspace.target_cert_date, '2028-03-31');
+  let plan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(gapWorkspaceId);
+  assert.equal(plan.id, gapPlan.id, 'the retained plan continues rather than being replaced');
+  assert.equal(plan.status, 'active');
+  assert.equal(plan.name, 'ISO 27001 certification support delivery plan');
+  assert.equal(plan.target_completion_date, '2028-03-31');
+  assert.equal(plan.forecast_completion_date, '2028-03-31');
+  assert.ok(await db.prepare(`SELECT 1 FROM engagement_delivery_events
+    WHERE plan_id=? AND action='contract_outcome_expanded'`).get(plan.id));
+
+  const targetChanged = await client.post(`/workspaces/${gapWorkspaceId}/update`, {
+    client_name: workspace.client_name,
+    industry: workspace.industry,
+    scope: workspace.scope,
+    target_cert_date: '2028-06-30',
+    frameworks_present: '1',
+    frameworks: 'iso27001',
+    engagement_outcome: 'certification_support',
+  });
+  assert.equal(targetChanged.status, 302);
+  plan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(gapWorkspaceId);
+  assert.equal(plan.target_completion_date, '2028-06-30');
+  assert.equal(plan.forecast_completion_date, '2028-06-30');
+  assert.equal((await db.prepare("SELECT answer FROM engagement_intake WHERE workspace_id=? AND question_id='cert-deadline'").get(gapWorkspaceId)).answer, '2028-06-30');
+
+  await db.prepare(`UPDATE engagement_intake SET answer='2028-09-30',answered_by=?,answered_at=CURRENT_TIMESTAMP
+    WHERE workspace_id=? AND question_id='cert-deadline'`).run(managerId, gapWorkspaceId);
+  const intakeApplied = await client.post(`/workspaces/${gapWorkspaceId}/intake/apply`, {});
+  assert.equal(intakeApplied.status, 302);
+  assert.equal((await db.prepare('SELECT target_cert_date FROM workspaces WHERE id=?').get(gapWorkspaceId)).target_cert_date, '2028-09-30');
+  plan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(gapWorkspaceId);
+  assert.equal(plan.target_completion_date, '2028-09-30');
+  assert.equal(plan.forecast_completion_date, '2028-09-30');
+
+  const downgrade = await client.post(`/workspaces/${gapWorkspaceId}/update`, {
+    client_name: workspace.client_name,
+    industry: workspace.industry,
+    scope: workspace.scope,
+    engagement_outcome: 'gap_assessment_only',
+  });
+  assert.equal(downgrade.status, 409);
+  assert.match(downgrade.text, /cannot be shortened to gap assessment only/i);
+  assert.equal((await db.prepare('SELECT engagement_outcome FROM workspaces WHERE id=?').get(gapWorkspaceId)).engagement_outcome, 'certification_support');
+  assert.equal((await db.prepare('SELECT name FROM engagement_delivery_plans WHERE workspace_id=?').get(gapWorkspaceId)).name,
+    'ISO 27001 certification support delivery plan');
+});
+
+test('full certification support cannot be bypassed by removing and re-enabling ISO 27001', async () => {
+  const workspace = await db.prepare('SELECT * FROM workspaces WHERE id=?').get(certificationWorkspaceId);
+  const removal = await client.post(`/workspaces/${certificationWorkspaceId}/update`, {
+    client_name: workspace.client_name,
+    industry: workspace.industry,
+    scope: workspace.scope,
+    frameworks_present: '1',
+    engagement_outcome: 'certification_support',
+  });
+  assert.equal(removal.status, 409);
+  assert.match(removal.text, /ISO 27001 cannot be removed/i);
+  assert.deepEqual(JSON.parse((await db.prepare('SELECT frameworks FROM workspaces WHERE id=?').get(certificationWorkspaceId)).frameworks), ['iso27001']);
+
+  const directRemoval = await client.post(`/workspaces/${certificationWorkspaceId}/frameworks`, {});
+  assert.equal(directRemoval.status, 409);
+  assert.match(directRemoval.text, /ISO 27001 cannot be removed/i);
+
+  await db.prepare(`UPDATE workspaces SET frameworks='[]',engagement_outcome='gap_assessment_only' WHERE id=?`)
+    .run(certificationWorkspaceId);
+  const reenableAsGap = await client.post(`/workspaces/${certificationWorkspaceId}/frameworks`, {
+    frameworks: 'iso27001',
+    engagement_outcome: 'gap_assessment_only',
+  });
+  assert.equal(reenableAsGap.status, 409);
+  assert.match(reenableAsGap.text, /cannot be shortened to gap assessment only/i);
+  assert.equal((await db.prepare('SELECT engagement_outcome FROM workspaces WHERE id=?').get(certificationWorkspaceId)).engagement_outcome, 'gap_assessment_only');
+  assert.deepEqual(JSON.parse((await db.prepare('SELECT frameworks FROM workspaces WHERE id=?').get(certificationWorkspaceId)).frameworks), []);
+  assert.equal((await db.prepare('SELECT name FROM engagement_delivery_plans WHERE workspace_id=?').get(certificationWorkspaceId)).name,
+    'ISO 27001 certification support delivery plan');
+
+  const recoveredAsFull = await client.post(`/workspaces/${certificationWorkspaceId}/frameworks`, {
+    frameworks: 'iso27001',
+    engagement_outcome: 'certification_support',
+    target_cert_date: '2028-12-31',
+  });
+  assert.equal(recoveredAsFull.status, 302, recoveredAsFull.text);
+  const recoveredWorkspace = await db.prepare('SELECT * FROM workspaces WHERE id=?').get(certificationWorkspaceId);
+  assert.deepEqual(JSON.parse(recoveredWorkspace.frameworks), ['iso27001']);
+  assert.equal(recoveredWorkspace.engagement_outcome, 'certification_support');
+  assert.equal(recoveredWorkspace.target_cert_date, '2028-12-31');
+  const recoveredPlan = await db.prepare('SELECT * FROM engagement_delivery_plans WHERE workspace_id=?').get(certificationWorkspaceId);
+  assert.equal(recoveredPlan.target_completion_date, '2028-12-31');
+  assert.equal(recoveredPlan.forecast_completion_date, '2028-12-31');
+});
+
+test('legacy rows and unknown values normalize to full certification support', async () => {
+  const id = Number((await db.prepare(`INSERT INTO workspaces (firm_id,client_name,frameworks,lead_consultant_id)
+    VALUES (?,'Legacy Lifecycle Client','["iso27001"]',?)`).run(firmId, managerId)).lastInsertRowid);
+  assert.equal((await db.prepare('SELECT engagement_outcome FROM workspaces WHERE id=?').get(id)).engagement_outcome, 'certification_support');
+  assert.equal(lifecycle.normalizeOutcome(null), 'certification_support');
+  assert.equal(lifecycle.normalizeOutcome('unexpected'), 'certification_support');
+  assert.equal(lifecycle.isGapOnly('gap_assessment_only'), true);
+  assert.equal(lifecycle.label('certification_support'), 'Full certification support');
+  await assert.rejects(async () => await db.prepare("UPDATE workspaces SET engagement_outcome='invalid' WHERE id=?").run(id), { code: '23514' });
+});

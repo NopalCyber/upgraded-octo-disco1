@@ -1,0 +1,133 @@
+<%- include('partials/auditor_header', { title: 'Overview', token, share, workspace, active: 'overview' }) %>
+
+<style>
+  .a-letter {
+    max-width: 720px;
+    font-size: 14.5px; line-height: 1.7; color: var(--text);
+    margin-bottom: 26px;
+  }
+  .a-letter p { margin: 0 0 14px; }
+  .a-letter p:last-of-type { margin-bottom: 0; }
+  .a-letter strong { font-weight: 500; color: var(--ink); }
+
+  .a-pack-cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    background: var(--accent); color: #fff;
+    text-decoration: none; border-radius: 4px;
+    font-size: 13px; font-weight: 500;
+    transition: background 0.12s;
+  }
+  .a-pack-cta:hover { background: var(--accent-deep); color: #fff; }
+
+  .a-toc {
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 0;
+    max-width: 720px;
+    margin: 28px 0;
+  }
+  .a-toc-item {
+    display: grid; grid-template-columns: 34px 1fr auto;
+    align-items: baseline;
+    padding: 10px 0;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 1px dotted var(--border);
+  }
+  .a-toc-item:last-child { border-bottom: none; }
+  .a-toc-num {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-variation-settings: "opsz" 18;
+    font-size: 15px; color: var(--accent);
+    font-weight: 500;
+  }
+  .a-toc-title {
+    font-size: 14px; color: var(--ink); font-weight: 500;
+  }
+  .a-toc-meta {
+    font-size: 11.5px; color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+  .a-toc-item:hover .a-toc-title { color: var(--accent); }
+
+  .a-colophon {
+    max-width: 720px;
+    font-size: 12px; color: var(--text-secondary);
+    line-height: 1.65;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .a-colophon dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 18px; margin: 0; }
+  .a-colophon dt { color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5px; font-weight: 500; padding-top: 2px; }
+  .a-colophon dd { margin: 0; color: var(--text); }
+
+  @media (max-width: 760px) {
+    .a-colophon dt
+    { font-size: 11px; }
+  }
+</style>
+
+<div class="a-page-head">
+  <h1 class="a-page-title"><%= workspace.client_name %> · Information Security Management System</h1>
+</div>
+
+<div class="a-letter">
+  <p>
+    Welcome.  This portal presents the documented information for <strong><%= workspace.client_name %></strong>'s
+    Information Security Management System,
+    prepared by <strong><%= firm.name || 'the consulting firm of record' %></strong>
+    in accordance with <strong>ISO/IEC 27001:2022</strong>.
+  </p>
+  <p>
+    The complete engagement record is available as a single branded PDF, the audit pack,
+    bundling the Statement of Applicability with its SHA-256 hash, the risk register and inherent-risk heatmap,
+    the full evidence index with file hashes, internal audit findings, nonconformities,
+    management reviews, and the improvement log.  We recommend downloading it first,
+    then returning here for targeted drill-through and individual evidence files.
+  </p>
+  <p>
+    Every access to this portal is timestamped and logged.  If you need anything that isn't here,
+    contact <%= firm.name || 'the consulting firm' %> directly.
+  </p>
+  <p style="margin-top:18px;">
+    <a href="/auditor/<%= token %>/audit-pack" class="a-pack-cta" download>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Generate audit pack PDF
+    </a>
+  </p>
+</div>
+
+<div class="a-toc">
+  <%
+    const tocItems = [
+      { href: 'soa', title: 'Statement of Applicability', meta: `${counts.soa_total} controls · ${counts.soa_snapshots} snapshot${counts.soa_snapshots === 1 ? '' : 's'}` },
+      { href: 'risks',     title: 'Risk register and heatmap',      meta: `${counts.risks} risk${counts.risks === 1 ? '' : 's'} · ${counts.risks_open} open` },
+      { href: 'evidence',  title: 'Evidence index',                 meta: `${counts.evidence} file${counts.evidence === 1 ? '' : 's'} on record` },
+      { href: 'documents', title: 'Policies and procedures',        meta: `${counts.documents} document${counts.documents === 1 ? '' : 's'} in force` },
+      { href: 'audits',    title: 'Internal audits and nonconformities', meta: `${counts.audits} audit${counts.audits === 1 ? '' : 's'} · ${counts.ncs_open} open NC${counts.ncs_open === 1 ? '' : 's'}` }
+    ];
+    const roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+    tocItems.forEach((t, i) => { t.num = roman[i]; });
+  %>
+  <% tocItems.forEach(t => { %>
+    <a href="/auditor/<%= token %>/<%= t.href %>" class="a-toc-item">
+      <span class="a-toc-num"><%= t.num %></span>
+      <span class="a-toc-title"><%= t.title %></span>
+      <span class="a-toc-meta"><%= t.meta %></span>
+    </a>
+  <% }) %>
+</div>
+
+<div class="a-colophon">
+  <dl>
+    <dt>Standard</dt><dd>ISO/IEC 27001:2022</dd>
+    <% if (workspace.scope) { %><dt>Scope</dt><dd><%= workspace.scope %></dd><% } %>
+    <dt>Prepared by</dt><dd><%= firm.name || 'the consulting firm of record' %></dd>
+    <dt>Report date</dt><dd><%= new Date().toISOString().slice(0,10) %></dd>
+    <% if (counts.mrms > 0) { %><dt>Last MRM</dt><dd><%= counts.mrms %> management review<%= counts.mrms === 1 ? '' : 's' %> held to date</dd><% } %>
+  </dl>
+</div>
+
+<%- include('partials/auditor_footer') %>

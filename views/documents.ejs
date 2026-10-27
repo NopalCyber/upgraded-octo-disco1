@@ -1,0 +1,266 @@
+<%- include('partials/header', { title: 'Documents', user, ws, active: 'documents' }) %>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Documents</h1>
+  </div>
+  <div class="row">
+    <button onclick="document.getElementById('newFromTpl').classList.toggle('hidden')" class="btn btn-primary">From template</button>
+    <button onclick="document.getElementById('newUpload').classList.toggle('hidden')" class="btn btn-secondary">Upload existing</button>
+    <button onclick="document.getElementById('newBlank').classList.toggle('hidden')" class="btn btn-secondary">Blank</button>
+  </div>
+</div>
+
+<% if (typeof awaitingMe !== 'undefined' && awaitingMe.length) { %>
+  <form method="POST" action="/workspaces/<%= ws.id %>/documents/bulk-approve" class="panel" style="margin-bottom:14px;">
+    <% if (typeof csrfToken !== 'undefined') { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+    <div class="panel-head">
+      <h2>Waiting for your approval (<%= awaitingMe.length %>)</h2>
+      <button class="btn btn-primary btn-xs">Approve selected</button>
+    </div>
+    <% awaitingMe.forEach(d => { %>
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--border);<%= d.ownWork ? 'opacity:0.7;' : '' %>">
+        <input type="checkbox" name="document_ids" value="<%= d.id %>" <%= d.ownWork ? 'disabled' : '' %>>
+        <a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>" class="link-muted" style="flex:1;min-width:0;"><%= d.name %> <span class="meta">v<%= d.version %></span></a>
+        <span class="meta text-sm"><%= d.ownWork ? 'You prepared this version; approve it on its own page' : `Prepared by ${d.prepared_by || 'unknown'}${d.submitted_at ? ' · submitted ' + String(d.submitted_at).slice(0, 10) : ''}` %></span>
+      </label>
+    <% }) %>
+  </form>
+<% } %>
+
+<%
+  const _docs = typeof rows !== 'undefined' ? rows : [];
+  const _overdue = _docs.filter(d => d.review_status === 'overdue');
+  const _dueSoon = _docs.filter(d => d.review_status === 'due_soon');
+%>
+<% if (_overdue.length > 0 || _dueSoon.length > 0) { %>
+  <div class="panel" style="margin-bottom:14px;background:<%= _overdue.length > 0 ? 'rgba(185,28,28,0.04)' : 'rgba(202,138,4,0.04)' %>;padding:12px 18px;display:flex;align-items:center;gap:12px;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="<%= _overdue.length > 0 ? '#b91c1c' : '#a16207' %>" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <div style="flex:1;">
+      <div style="font-weight: 500;font-size:13.5px;color:<%= _overdue.length > 0 ? '#b91c1c' : '#a16207' %>;">
+        <% if (_overdue.length > 0) { %><%= _overdue.length %> document<%= _overdue.length === 1 ? '' : 's' %> overdue for review<% } %>
+        <% if (_overdue.length > 0 && _dueSoon.length > 0) { %> &middot; <% } %>
+        <% if (_dueSoon.length > 0) { %><%= _dueSoon.length %> due within 30 days<% } %>
+      </div>
+      <div class="meta text-base" style="margin-top:2px;">
+        Top overdue:
+        <% _overdue.slice(0, 3).forEach((d, i) => { %><a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>" class="link-muted"><%= d.name %></a><% if (i < Math.min(_overdue.length, 3) - 1) { %>, <% } %><% }) %>
+        <% if (_overdue.length > 3) { %> &middot; +<%= _overdue.length - 3 %> more<% } %>
+        <% if (_overdue.length === 0 && _dueSoon.length > 0) { %>
+          <% _dueSoon.slice(0, 3).forEach((d, i) => { %><a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>" class="link-muted"><%= d.name %></a><% if (i < Math.min(_dueSoon.length, 3) - 1) { %>, <% } %><% }) %>
+        <% } %>
+      </div>
+    </div>
+    <a href="/workspaces/<%= ws.id %>/policy-adoption" class="btn btn-secondary btn-xs">Review status →</a>
+  </div>
+<% } %>
+
+<div id="newFromTpl" class="hidden panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>Generate from template</h2><span class="meta">Mandatory templates are marked first - start with those</span></div>
+  <% const tierLabel = { mandatory: 'Mandatory (ISO requires)', expected: 'Expected (auditors look for)', recommended: 'Recommended' };
+     const tierOrder = ['mandatory','expected','recommended'];
+     const tieredCounts = { mandatory: 0, expected: 0, recommended: 0 };
+     templates.forEach(t => { tieredCounts[t.tier || 'recommended']++; }); %>
+  <div class="panel-pad text-base" style="border-bottom:1px solid var(--border);background:var(--bg-subtle);display:flex;gap:14px;align-items:center;">
+    <span><strong class="text-danger" style="display:inline-flex;align-items:center;gap:4px;"><%- tierIcon('mandatory') %><%= tieredCounts.mandatory %></strong> mandatory</span>
+    <span><strong class="text-warn" style="display:inline-flex;align-items:center;gap:4px;"><%- tierIcon('expected') %><%= tieredCounts.expected %></strong> expected</span>
+    <span><strong class="text-secondary" style="display:inline-flex;align-items:center;gap:4px;"><%- tierIcon('recommended') %><%= tieredCounts.recommended %></strong> recommended</span>
+    <span class="meta" style="margin-left:auto;">68 total templates · Clauses 7.5, 6.1.3, 5.2 mandate documented information</span>
+  </div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/documents/from-template" class="panel-pad grid-2">
+    <div class="col-full">
+      <label class="label">Template</label>
+      <select class="select" name="template_id" required>
+        <option value="">- pick a template (mandatory ones first) -</option>
+        <% tierOrder.forEach(tier => {
+             const tplsInTier = templates.filter(t => (t.tier || 'recommended') === tier);
+             if (!tplsInTier.length) return; %>
+          <optgroup label="<%= tierLabel[tier] %>">
+            <% tplsInTier.forEach(t => { %>
+              <option value="<%= t.id %>"><%= t.name %> <%= t.category ? '· ' + t.category : '' %></option>
+            <% }) %>
+          </optgroup>
+        <% }) %>
+      </select>
+    </div>
+    <div><label class="label">Document owner</label><input class="input" name="document_owner" value="CISO"></div>
+    <div><label class="label">Approval authority</label><input class="input" name="approval_authority" value="Top Management"></div>
+    <div><label class="label">Review period</label><input class="input" name="review_period" value="Annual"></div>
+    <div></div>
+    <div class="col-full"><button class="btn btn-primary">Generate document</button></div>
+  </form>
+</div>
+
+<div id="newUpload" class="hidden panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>Upload existing document</h2><span class="meta">Bring your client's current policies/procedures into the ISMS</span></div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/documents/upload" enctype="multipart/form-data" class="panel-pad grid-2">
+    <div class="col-full">
+      <label class="label">File</label>
+      <input class="input" type="file" name="file" accept=".docx,.pdf,.md,.markdown,.txt" required>
+      <div class="meta" style="margin-top:4px;">Accepts .docx, .pdf, .md, .txt. The file is converted to editable markdown; the original is preserved as the approved source-of-truth.</div>
+    </div>
+    <div><label class="label">Name <span class="meta">(optional - defaults to filename)</span></label><input class="input" name="name" placeholder="e.g. Information Security Policy"></div>
+    <div><label class="label">Category</label>
+      <select class="select" name="category">
+        <option value="policy">Policy</option><option value="procedure">Procedure</option>
+        <option value="plan">Plan</option><option value="record">Record</option>
+        <option value="form">Form</option><option value="other">Other</option>
+      </select>
+    </div>
+    <div class="col-full"><button class="btn btn-primary">Upload &amp; convert</button></div>
+  </form>
+</div>
+
+<div id="newBlank" class="hidden panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>Create blank</h2></div>
+  <form method="POST" action="/workspaces/<%= ws.id %>/documents/blank" class="panel-pad grid-2">
+    <div><label class="label">Name</label><input class="input" name="name" required></div>
+    <div><label class="label">Category</label>
+      <select class="select" name="category">
+        <option value="policy">Policy</option><option value="procedure">Procedure</option>
+        <option value="plan">Plan</option><option value="record">Record</option><option value="other">Other</option>
+      </select>
+    </div>
+    <div class="col-full"><button class="btn btn-primary">Create</button></div>
+  </form>
+</div>
+
+<% if (typeof taggedItems !== 'undefined' && taggedItems.length > 0) { %>
+  <div class="panel" style="margin-bottom:14px;">
+    <form method="GET" action="/workspaces/<%= ws.id %>/documents" class="panel-pad" style="display:flex;gap:8px;align-items:end;">
+      <div style="flex:1;">
+        <label class="label">Filter by tagged clause / control</label>
+        <select class="select" name="tag" onchange="this.form.submit()">
+          <option value="">All documents (<%= docs.length %><%= tagFilter ? '+' : '' %>)</option>
+          <optgroup label="Main body clauses">
+            <% taggedItems.filter(i => i.type === 'clause').forEach(i => { %>
+              <option value="<%= i.id %>" <%= tagFilter === i.id ? 'selected' : '' %>><%= i.id.replace('clause-','').toUpperCase() %> - <%= i.title %></option>
+            <% }) %>
+          </optgroup>
+          <optgroup label="Annex A controls">
+            <% taggedItems.filter(i => i.type === 'control').forEach(i => { %>
+              <option value="<%= i.id %>" <%= tagFilter === i.id ? 'selected' : '' %>><%= i.id.replace('annex-','').toUpperCase() %> - <%= i.title.replace(/^A\.[0-9.]+ /, '') %></option>
+            <% }) %>
+          </optgroup>
+        </select>
+      </div>
+      <% if (tagFilter) { %>
+        <a href="/workspaces/<%= ws.id %>/documents" class="btn btn-secondary btn-xs">Clear filter</a>
+      <% } %>
+    </form>
+  </div>
+<% } %>
+
+<% if (typeof registers !== 'undefined' && registers.length) { %>
+  <div class="panel" style="margin-bottom:14px;">
+    <div class="panel-head"><h2>Registers</h2><span class="meta">Structured registers required by ISO 27001 - reviewed on the same cadence as policies</span></div>
+    <table class="t">
+      <thead><tr>
+        <th>Name</th>
+        <th style="width:90px">Clause</th>
+        <th style="width:110px;text-align:right;">Entries</th>
+        <th style="width:140px">Last reviewed</th>
+        <th style="width:140px">Next review</th>
+        <th style="width:110px">Status</th>
+      </tr></thead>
+      <tbody>
+        <% registers.forEach(r => { %>
+          <tr style="cursor:pointer" onclick="location='<%= r.href %>'">
+            <td><strong><%= r.name %></strong><% if (r.overdue_count > 0) { %><div class="meta text-danger text-xs" style="margin-top:2px;"><%= r.overdue_count %> entr<%= r.overdue_count === 1 ? 'y' : 'ies' %> overdue for review</div><% } %></td>
+            <td class="mono meta">Cl. <%= r.clause %></td>
+            <td class="num"><%= r.total %></td>
+            <td class="meta"><%= r.last_reviewed || '-' %></td>
+            <td class="meta"><%= r.next_review || '-' %></td>
+            <td>
+              <% if (r.review_status === 'overdue') { %><span class="tag tag-danger">overdue</span>
+              <% } else if (r.review_status === 'due_soon') { %><span class="tag tag-warn">due soon</span>
+              <% } else if (r.review_status === 'current') { %><span class="tag text-success" style="background:rgba(21,128,61,0.08);">current</span>
+              <% } else { %><span class="meta">-</span><% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+<% } %>
+
+<div class="panel" style="overflow:hidden">
+  <table class="t">
+    <thead><tr>
+      <th>Name</th>
+      <th style="width:100px">Category</th>
+      <th style="width:110px">Status</th>
+      <th style="width:50px">Ver</th>
+      <th style="width:240px">Tagged clauses / controls</th>
+      <th style="width:120px">Review by</th>
+      <th style="width:130px">Updated</th>
+      <th style="width:120px"></th>
+    </tr></thead>
+    <tbody>
+      <% docs.forEach(d => {
+           const tags = (typeof tagsByDoc !== 'undefined' && tagsByDoc[d.id]) || [];
+           const visibleTags = tags.slice(0, 4);
+           const hiddenCount = tags.length - visibleTags.length;
+      %>
+        <tr>
+          <td><a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>" class="link-muted" style="font-weight:500;"><%= d.name %></a></td>
+          <td class="text-secondary text-base" style="text-transform:capitalize;"><%= d.category || '-' %></td>
+          <td><span class="status s-<%= d.status === 'approved' || d.status === 'published' ? 'done' : d.status %>"><%= d.status %></span></td>
+          <td class="num meta">v<%= d.version %></td>
+          <td>
+            <% if (tags.length === 0) { %>
+              <a class="text-sm text-warn" href="/workspaces/<%= ws.id %>/documents/<%= d.id %>" style="text-decoration:none;font-style:italic;" title="No tags - auditors use these to trace coverage">+ tag</a>
+            <% } else { %>
+              <div style="display:flex;flex-wrap:wrap;gap:3px;">
+                <% visibleTags.forEach(t => {
+                     const code = t.iso_item_id.replace('annex-','').replace('clause-','').toUpperCase();
+                     const isClause = t.type === 'clause';
+                %>
+                  <a href="?tag=<%= t.iso_item_id %>" class="mono" style="font-size:10.5px;font-weight:500;padding:1px 6px;border-radius:3px;text-decoration:none;background:<%= isClause ? 'rgba(8,145,178,0.10)' : 'rgba(71,85,105,0.10)' %>;color:<%= isClause ? '#0891b2' : '#475569' %>;" title="<%= t.section_ref ? '§' + t.section_ref : '' %>"><%= code %></a>
+                <% }) %>
+                <% if (hiddenCount > 0) { %>
+                  <a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>" class="meta text-eyebrow" style="text-decoration:none;padding:1px 4px;">+<%= hiddenCount %></a>
+                <% } %>
+              </div>
+            <% } %>
+          </td>
+          <td>
+            <% if (!d.next_review_date) { %>
+              <span class="meta text-sm">-</span>
+            <% } else {
+                 const rsColor = d.review_status === 'overdue' ? '#b91c1c' : d.review_status === 'due_soon' ? '#a16207' : 'var(--text-secondary)';
+            %>
+              <span style="font-size:11.5px;color:<%= rsColor %>;font-weight:<%= d.review_status === 'overdue' ? 600 : 500 %>;"><%= d.next_review_date %></span>
+              <% if (d.review_status === 'overdue') { %><div class="text-xxs text-danger" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.04em;">overdue</div>
+              <% } else if (d.review_status === 'due_soon') { %><div class="text-xxs text-warn" style="font-weight: 500;text-transform:uppercase;letter-spacing:0.04em;">due soon</div><% } %>
+            <% } %>
+          </td>
+          <td class="num meta text-sm"><%= d.updated_at %></td>
+          <td style="text-align:right">
+            <a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>/docx" class="link-muted text-base" style="font-weight:500;color:var(--accent);">.docx</a>
+            <span class="text-tertiary">·</span>
+            <a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>/print" target="_blank" class="link-muted text-base">Print</a>
+            <span class="text-tertiary">·</span>
+            <a href="/workspaces/<%= ws.id %>/documents/<%= d.id %>/download" class="link-muted text-base">.md</a>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (docs.length === 0) { %>
+        <tr><td colspan="8" style="padding:0;">
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <div class="empty-title">Generate your first document</div>
+            <div class="empty-sub"><%= templates.length %> ISO 27001:2022-aligned starter templates are available. Pick one, fill in the metadata fields, and the tool produces a draft you can edit and approve.</div>
+            <button onclick="document.getElementById('newFromTpl').classList.toggle('hidden')" class="btn btn-primary">From template</button>
+          </div>
+        </td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<% if (typeof pg !== 'undefined' && pg) { %><%- include('partials/pager', { pg, pagerHref }) %><% } %>
+
+<%- include('partials/footer') %>

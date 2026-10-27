@@ -1,0 +1,246 @@
+<%
+  const navActive = typeof active !== 'undefined' ? active : '';
+  const navReviewCount = typeof openReviewCount !== 'undefined' ? openReviewCount : 0;
+  let navFrameworks = ws.frameworks || [];
+  if (!Array.isArray(navFrameworks)) {
+    try { navFrameworks = JSON.parse(navFrameworks || '[]'); } catch (_) { navFrameworks = []; }
+  }
+  const hasIso27001 = navFrameworks.includes('iso27001');
+  const hasTprm = Number(ws.tprm_enabled || 0) === 1;
+  const gapAssessmentOnly = hasIso27001 && ws.engagement_outcome === 'gap_assessment_only';
+  const showIso27001Intake = hasIso27001;
+
+  let navDomains = [
+    {
+      id: 'work', label: 'Work queue',
+      icon: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+      active: ['client-portal', 'inbox', 'review-queue'],
+      items: [
+        { label: 'Client collaboration', href: `/workspaces/${ws.id}/client-portal`, active: ['client-portal'] },
+        { label: 'Inbox & notifications', href: `/workspaces/${ws.id}/inbox`, active: ['inbox'] },
+        { label: 'Review queue', href: `/workspaces/${ws.id}/review-queue`, active: ['review-queue'], badge: navReviewCount, lead: true }
+      ]
+    },
+    ...(hasIso27001 ? [{
+      id: 'plan', label: 'Plan & work',
+      icon: '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+      active: ['engagement-plan', 'roadmap', 'tasks', 'calendar'],
+      items: [
+        { label: 'Engagement plan', href: `/workspaces/${ws.id}/engagement-plan`, active: ['engagement-plan'], lead: true },
+        { label: 'Tasks', href: `/workspaces/${ws.id}/tasks`, active: ['tasks'], shortcut: 'g t' },
+        { label: 'Compliance calendar', href: `/workspaces/${ws.id}/calendar`, active: ['calendar'] }
+      ]
+    }] : []),
+    ...(hasIso27001 ? [{
+      id: 'assessment', label: gapAssessmentOnly ? 'ISO 27001 gap assessment' : 'ISO 27001 programme',
+      icon: '<path d="M22 12A10 10 0 1 1 12 2"/><polyline points="22 4 12 14 9 11"/>',
+      active: ['readiness', 'data-quality', 'gap-assessment', 'gap-assessment-summary'],
+      items: [
+        ...(!gapAssessmentOnly ? [{ label: 'Certification readiness', href: `/workspaces/${ws.id}/readiness`, active: ['readiness'], shortcut: 'g e', lead: true }] : []),
+        { label: 'Data quality & truth', href: `/workspaces/${ws.id}/data-quality`, active: ['data-quality'], off: true },
+        { label: 'Gap assessment', href: `/workspaces/${ws.id}/gap-assessment`, active: ['gap-assessment'] },
+        { label: 'Assessment findings', href: `/workspaces/${ws.id}/controls/assess/summary`, active: ['gap-assessment-summary'], lead: true }
+      ]
+    }] : []),
+    ...(hasTprm ? [{
+      id: 'tprm', label: 'Third-party risk',
+      icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/>',
+      active: ['tprm-overview', 'tprm-third-parties', 'tprm-assessments', 'tprm-findings', 'tprm-monitoring', 'tprm-reports', 'tprm-settings'],
+      items: [
+        { label: 'Overview', href: `/workspaces/${ws.id}/tprm`, active: ['tprm-overview'], shortcut: 'g v' },
+        { label: 'Third parties', href: `/workspaces/${ws.id}/tprm/third-parties`, active: ['tprm-third-parties'] },
+        { label: 'Assessments', href: `/workspaces/${ws.id}/tprm/assessments`, active: ['tprm-assessments'] },
+        { label: 'Findings & actions', href: `/workspaces/${ws.id}/tprm/findings`, active: ['tprm-findings'] },
+        { label: 'Monitoring & renewals', href: `/workspaces/${ws.id}/tprm/monitoring`, active: ['tprm-monitoring'] },
+        { label: 'Reports', moreLabel: 'Third-party risk reports', href: `/workspaces/${ws.id}/tprm/reports`, active: ['tprm-reports'], lead: true },
+        ...(rbac.isManager(user.firm_role) ? [{ label: 'Methodology & settings', href: `/workspaces/${ws.id}/tprm/settings`, active: ['tprm-settings'] }] : [])
+      ]
+    }] : []),
+    ...(hasIso27001 ? [{
+      id: 'controls', label: 'ISO controls & SoA',
+      icon: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+      active: ['controls', 'soa'],
+      items: [
+        { label: 'Control register', href: `/workspaces/${ws.id}/controls`, active: ['controls'], shortcut: 'g c' },
+        { label: 'Statement of Applicability', href: `/workspaces/${ws.id}/soa`, active: ['soa'], shortcut: 'g s' }
+      ]
+    }] : []),
+    {
+      id: 'risk', label: gapAssessmentOnly ? 'Assessment context' : 'Risks & operations',
+      icon: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+      active: ['assets', 'risks', 'incidents', 'changes', 'bcp'],
+      items: gapAssessmentOnly ? [
+        { label: 'Assets in assessment scope', href: `/workspaces/${ws.id}/assets`, active: ['assets'], shortcut: 'g a' },
+        { label: 'Risk context', href: `/workspaces/${ws.id}/risks`, active: ['risks'], shortcut: 'g r' }
+      ] : [
+        { label: 'Assets', href: `/workspaces/${ws.id}/assets`, active: ['assets'], shortcut: 'g a' },
+        { label: 'Risk register', href: `/workspaces/${ws.id}/risks`, active: ['risks'], shortcut: 'g r' },
+        { label: 'Incidents', href: `/workspaces/${ws.id}/incidents`, active: ['incidents'], shortcut: 'g x' },
+        { label: 'Change register', href: `/workspaces/${ws.id}/changes`, active: ['changes'], lead: true },
+        { label: 'Business continuity', href: `/workspaces/${ws.id}/bcp`, active: ['bcp'], shortcut: 'g b', lead: true }
+      ]
+    },
+    {
+      id: 'policies', label: gapAssessmentOnly ? 'Assessment evidence' : 'Policies & evidence',
+      icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+      active: ['documents', 'templates', 'policy-adoption', 'evidence', 'evidence-coverage'],
+      items: gapAssessmentOnly ? [
+        { label: 'Document register', href: `/workspaces/${ws.id}/documents`, active: ['documents'], shortcut: 'g d' },
+        { label: 'Evidence library', href: `/workspaces/${ws.id}/evidence`, active: ['evidence'] },
+        { label: 'Evidence coverage', href: `/workspaces/${ws.id}/evidence-coverage`, active: ['evidence-coverage'], lead: true }
+      ] : [
+        { label: 'Document register', href: `/workspaces/${ws.id}/documents`, active: ['documents'], shortcut: 'g d' },
+        { label: 'Policy templates', href: `/workspaces/${ws.id}/templates`, active: ['templates'], lead: true },
+        { label: 'Policy adoption & reviews', href: `/workspaces/${ws.id}/policy-adoption`, active: ['policy-adoption'], lead: true },
+        { label: 'Evidence library', href: `/workspaces/${ws.id}/evidence`, active: ['evidence'] },
+        { label: 'Evidence coverage', href: `/workspaces/${ws.id}/evidence-coverage`, active: ['evidence-coverage'], lead: true }
+      ]
+    },
+    ...(!gapAssessmentOnly ? [{
+      id: 'governance', label: 'Governance',
+      icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+      active: ['objectives', 'metrics-library', 'mrms', 'training', 'competence', 'communication-plan'],
+      items: [
+        { label: 'Performance & objectives', href: `/workspaces/${ws.id}/objectives`, active: ['objectives', 'metrics-library'], lead: true },
+        { label: 'Management reviews', href: `/workspaces/${ws.id}/mrms`, active: ['mrms'], shortcut: 'g m' },
+        { label: 'Training & awareness', href: `/workspaces/${ws.id}/training`, active: ['training'], lead: true },
+        { label: 'Competence', href: `/workspaces/${ws.id}/competence`, active: ['competence'], lead: true },
+        { label: 'Communication plan', href: `/workspaces/${ws.id}/communication-plan`, active: ['communication-plan'], lead: true }
+      ]
+    }] : []),
+    {
+      id: 'audit', label: gapAssessmentOnly ? 'Assessment reporting' : 'Assurance & certification',
+      icon: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+      active: ['assurance', 'deliverables', 'audit-pack', 'audits', 'nc', 'cert-cycle', 'changes-since', 'auditor-access'],
+      items: gapAssessmentOnly ? [
+        { label: 'Assessment reports', href: `/workspaces/${ws.id}/assurance`, active: ['assurance', 'deliverables', 'audit-pack'], lead: true }
+      ] : [
+        { label: 'Assurance & reports', href: `/workspaces/${ws.id}/assurance`, active: ['assurance', 'deliverables', 'audit-pack'], lead: true },
+        { label: 'Internal audits', href: `/workspaces/${ws.id}/audits`, active: ['audits'], shortcut: 'g i' },
+        { label: 'Nonconformities', href: `/workspaces/${ws.id}/nonconformities`, active: ['nc'], shortcut: 'g n' },
+        ...(hasIso27001 && !gapAssessmentOnly ? [{ label: 'Certification cycle', moreLabel: 'ISO 27001 certification cycle', href: `/workspaces/${ws.id}/cert-cycle`, active: ['cert-cycle'], lead: true }] : []),
+        { label: 'Changes since last audit', href: `/workspaces/${ws.id}/changes-since`, active: ['changes-since'], lead: true },
+        { label: 'Auditor access', href: `/workspaces/${ws.id}/auditor-access`, active: ['auditor-access'], off: true }
+      ]
+    },
+    {
+      id: 'settings', label: 'Settings',
+      icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+      active: ['setup', 'intake', 'team', 'members', 'access', 'system', 'activity'],
+      items: [
+        { label: 'Client setup', href: `/workspaces/${ws.id}/setup`, active: ['setup'], lead: true },
+        ...(showIso27001Intake ? [{ label: 'ISO 27001 intake', href: `/workspaces/${ws.id}/intake`, active: ['intake'], off: true }] : []),
+        { label: 'Team & access', href: `/workspaces/${ws.id}/team`, active: ['team', 'members', 'access'], off: true },
+        ...(rbac.isManager(user.firm_role) ? [{ label: 'System', href: `/workspaces/${ws.id}/system`, active: ['system'] }] : []),
+        { label: 'Activity log', href: `/workspaces/${ws.id}/activity-log`, active: ['activity'], off: true }
+      ]
+    }
+  ];
+  const newExperience = typeof experienceEnabled !== 'undefined' && experienceEnabled;
+  if (newExperience) {
+    const original = navDomains;
+    const collect = ids => original.filter(d=>ids.includes(d.id)).flatMap(d=>d.items);
+    const grouped = (id,label,ids) => {
+      const source=original.filter(d=>ids.includes(d.id));
+      return {id,label,icon:source[0]?.icon || '<circle cx="12" cy="12" r="8"/>',active:source.flatMap(d=>d.active),items:collect(ids)};
+    };
+    const assigned=new Set(['work','plan','policies','settings','audit']);
+    const programmeIds=original.filter(d=>!assigned.has(d.id)).map(d=>d.id);
+    navDomains=[
+      grouped('work','Work',['work','plan']),
+      grouped('programmes','Programmes',programmeIds),
+      grouped('documents','Evidence & documents',['policies']),
+      grouped('reports','Reports',['audit']),
+      grouped('settings','Team & settings',['settings'])
+    ];
+    const programmeLabels={'assessment':'ISO 27001','tprm':'Third-party risk','controls':'ISO 27001'};
+    const programmeGroups = new Map();
+    original.filter(d=>programmeIds.includes(d.id)).forEach(domain=>{
+      const label=programmeLabels[domain.id] || domain.label;
+      const group=programmeGroups.get(label) || {...domain,label,items:[],active:[]};
+      group.items.push(...domain.items);
+      group.active.push(...domain.active);
+      programmeGroups.set(label,group);
+    });
+    navDomains[1].items=[];
+    navDomains[1].groups=[...programmeGroups.values()];
+    if (!navDomains[2].items.length) navDomains[2].items=[
+      {label:'Evidence library',href:`/workspaces/${ws.id}/evidence`,active:['evidence']},
+      {label:'Document register',href:`/workspaces/${ws.id}/documents`,active:['documents']}
+    ];
+  }
+
+  const navRoleRaw = ws._userRole || (user && user.firm_role);
+  const navRole = typeof rbac.normalizeRole === 'function' ? rbac.normalizeRole(navRoleRaw) : navRoleRaw;
+  const navTrimmed = !!(user && user.user_type === 'firm' && navRole === 'consultant');
+  if (navTrimmed) {
+    const moreTools = [], leftOut = [];
+    const keep = items => items.filter(item => {
+      if (item.off) { leftOut.push(item); return false; }
+      if (!item.lead) return true;
+      moreTools.push({ ...item, label: item.moreLabel || item.label });
+      return false;
+    });
+    navDomains.forEach(domain => {
+      domain.items = keep(domain.items);
+      if (domain.groups) domain.groups = domain.groups.filter(group => (group.items = keep(group.items)).length);
+    });
+    navDomains = navDomains.filter(domain => domain.items.length || (domain.groups || []).length);
+    navDomains.forEach(domain => { if (domain.id === 'reports') domain.label = 'Internal audit'; });
+    const keptActive = new Set(navDomains.flatMap(d => [...d.items, ...(d.groups || []).flatMap(g => g.items)]).flatMap(i => i.active));
+    const movedActive = new Set(moreTools.flatMap(i => i.active).filter(a => !keptActive.has(a)));
+    const goneActive = new Set(leftOut.flatMap(i => i.active).filter(a => !keptActive.has(a)));
+    const unmoved = list => list.filter(a => !movedActive.has(a) && !goneActive.has(a));
+    navDomains.forEach(domain => {
+      domain.active = unmoved(domain.active);
+      (domain.groups || []).forEach(group => { group.active = unmoved(group.active); });
+    });
+    if (moreTools.length) navDomains.push({
+      id: 'more', label: 'More tools',
+      icon: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
+      active: [...movedActive], items: moreTools
+    });
+  }
+
+%>
+
+<a href="/workspaces/<%= ws.id %>" data-shortcut="g o" class="nav-item <%= navActive === 'overview' ? 'active' : '' %>" <% if (navActive === 'overview') { %>aria-current="page"<% } %>>
+  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+  <span class="nav-item-text">Overview</span>
+</a>
+
+<% navDomains.forEach(domain => {
+     const domainActive = domain.active.includes(navActive);
+%>
+  <details class="nav-domain <%= domainActive ? 'is-active' : '' %>" <%= domainActive ? 'open' : '' %>>
+    <summary class="nav-domain-summary" aria-label="<%= domain.label %>">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><%- domain.icon %></svg>
+      <span class="nav-domain-text"><%= domain.label %></span>
+      <% if (domain.id === 'work' && navReviewCount > 0 && !navTrimmed) { %><span class="nav-domain-badge"><%= navReviewCount %></span><% } %>
+      <svg class="nav-domain-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+    </summary>
+    <div class="nav-domain-items">
+      <% (domain.groups || []).forEach(group => { const groupActive=group.active.includes(navActive); %>
+        <details class="nav-domain nav-programme <%= groupActive ? 'is-active' : '' %>" <%= groupActive ? 'open' : '' %>>
+          <summary class="nav-domain-summary" aria-label="<%= group.label %>">
+            <span class="nav-domain-text"><%= group.label %></span>
+            <svg class="nav-domain-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+          </summary>
+          <div class="nav-domain-items">
+            <% group.items.forEach(item => { const itemActive=item.active.includes(navActive); %>
+              <a href="<%= item.href %>" class="nav-subitem <%= itemActive ? 'active' : '' %>" <% if(item.shortcut){ %>data-shortcut="<%= item.shortcut %>"<% } %> <% if(itemActive){ %>aria-current="page"<% } %>><span><%= item.label %></span></a>
+            <% }); %>
+          </div>
+        </details>
+      <% }); %>
+      <% domain.items.forEach(item => {
+           const itemActive = item.active.includes(navActive);
+      %>
+        <a href="<%= item.href %>" class="nav-subitem <%= itemActive ? 'active' : '' %>" <% if (item.shortcut) { %>data-shortcut="<%= item.shortcut %>"<% } %> <% if (itemActive) { %>aria-current="page"<% } %>>
+          <span class="nav-subitem-text"><%= item.label %></span>
+          <% if (item.badge > 0) { %><span class="nav-subitem-badge"><%= item.badge %></span><% } %>
+        </a>
+      <% }) %>
+    </div>
+  </details>
+<% }) %>

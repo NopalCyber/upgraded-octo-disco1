@@ -1,0 +1,12 @@
+<%
+  const _tab = (typeof tab !== 'undefined' && tab) ? tab : 'audits';
+  const _tabs = [
+    { id: 'audits',    label: 'Audits',    href: `/workspaces/${ws.id}/audits` },
+    { id: 'programme', label: 'Programme', href: `/workspaces/${ws.id}/audit-programme` },
+  ];
+%>
+<div class="subtabs">
+  <% _tabs.forEach(t => { %>
+    <a href="<%= t.href %>" class="subtab <%= t.id === _tab ? 'is-active' : '' %>"><%= t.label %></a>
+  <% }) %>
+</div>

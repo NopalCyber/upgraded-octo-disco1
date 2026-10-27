@@ -1,0 +1,88 @@
+<%- include('partials/header', { title: 'Activity log', user, ws, active: 'activity' }) %>
+
+<style>
+  @media (max-width: 600px) {
+    .activity-diff-grid { grid-template-columns: 1fr !important; }
+    .activity-diff-grid pre { overflow-wrap: anywhere; }
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Activity log</h1>
+    <div class="page-subtitle">Tamper-evident record of every change. Filter by user, action, type or date.</div>
+  </div>
+  <a href="/workspaces/<%= ws.id %>/activity-log.csv?<%= new URLSearchParams(filters).toString() %>" class="btn btn-secondary btn-xs">Export CSV</a>
+</div>
+
+<%- include('partials/activity_tabs', { ws, tab: 'log' }) %>
+
+<div class="panel" style="margin-bottom:14px">
+  <form method="GET" action="/workspaces/<%= ws.id %>/activity-log" class="panel-pad stack-grid" style="--cols:repeat(6,1fr);gap:10px;align-items:end;">
+    <div>
+      <label class="label">User</label>
+      <select class="select" name="user_id">
+        <option value="">All</option>
+        <% users.forEach(u => { %><option value="<%= u.id %>" <%= filters.user_id == u.id ? 'selected' : '' %>><%= u.name %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="label">Action</label>
+      <select class="select" name="action">
+        <option value="">All</option>
+        <% actions.forEach(a => { %><option value="<%= a %>" <%= filters.action === a ? 'selected' : '' %>><%= a %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="label">Entity type</label>
+      <select class="select" name="entity_type">
+        <option value="">All</option>
+        <% types.forEach(t => { %><option value="<%= t %>" <%= filters.entity_type === t ? 'selected' : '' %>><%= t %></option><% }) %>
+      </select>
+    </div>
+    <div><label class="label">From</label><input class="input" type="date" name="from" value="<%= filters.from %>"></div>
+    <div><label class="label">To</label><input class="input" type="date" name="to" value="<%= filters.to %>"></div>
+    <div class="row"><input class="input" name="q" placeholder="search…" value="<%= filters.q %>"><button class="btn btn-primary btn-xs">Apply</button></div>
+  </form>
+</div>
+
+<div class="panel" style="overflow:hidden">
+  <table class="t">
+    <thead><tr><th style="width:160px">When</th><th>User</th><th>Action</th><th>Entity</th><th>Details / diff</th><th>IP</th></tr></thead>
+    <tbody>
+      <% log.forEach(l => { %>
+        <tr>
+          <td class="meta mono text-sm"><%= l.created_at %></td>
+          <td><%= l.user_name %></td>
+          <td class="mono text-base"><%= l.action %></td>
+          <td class="meta">
+            <% if (l.entity_type) { %><%= l.entity_type %><% if (l.entity_id) { %> #<%= l.entity_id %><% } %><% } else { %>-<% } %>
+          </td>
+          <td class="meta" style="max-width:520px">
+            <% if (l.before_state || l.after_state) { %>
+              <details>
+                <summary class="text-sm" style="cursor:pointer;color:var(--accent);">show diff</summary>
+                <div class="text-sm activity-diff-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;font-family:ui-monospace,monospace;">
+                  <div class="text-danger" style="background:rgba(220,38,38,0.06);padding:6px 8px;border-radius:4px;"><strong>Before</strong><pre style="white-space:pre-wrap;margin:4px 0 0;"><%= l.before_state || '{}' %></pre></div>
+                  <div class="text-success" style="background:rgba(22,163,74,0.06);padding:6px 8px;border-radius:4px;"><strong>After</strong><pre style="white-space:pre-wrap;margin:4px 0 0;"><%= l.after_state || '{}' %></pre></div>
+                </div>
+              </details>
+            <% } else if (l.details) { %>
+              <span class="text-sm" style="font-family:ui-monospace,monospace;"><%= l.details.length > 80 ? l.details.slice(0,80) + '…' : l.details %></span>
+            <% } else { %>
+              -
+            <% } %>
+          </td>
+          <td class="meta mono text-xs"><%= l.ip_address || '-' %></td>
+        </tr>
+      <% }) %>
+      <% if (log.length === 0) { %>
+        <tr><td colspan="6" style="padding:0"><div class="empty-state"><div class="empty-sub">No activity matches these filters.</div></div></td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/pager', { pg, pagerHref }) %>
+
+<%- include('partials/footer') %>
